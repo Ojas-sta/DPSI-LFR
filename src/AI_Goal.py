@@ -9,8 +9,8 @@ AI_CONFIG = {
     "INTERSECTION_MIN_NEIGHBORS": 3,
     "LEARNING_RATE": 0.01,
     "EPOCHS": 1000,
-    "WEIGHTS_FILE": "cnn_grid_weights.json",
-    "NUM_FILTERS": 4,
+    "WEIGHTS_FILE": "cnn_grid_weights_v2.json",
+    "NUM_FILTERS": 8,
     "NUM_CLASSES": 7
 }
 
@@ -21,11 +21,14 @@ class TrainableGridCNN:
         self.num_filters = cfg["NUM_FILTERS"]
         self.num_classes = cfg["NUM_CLASSES"]
 
-        self.conv_out_h = 2
-        self.conv_out_w = 3
-        self.flat_size = self.num_filters * self.conv_out_h * self.conv_out_w
+        self.conv_out_h = 3
+        self.conv_out_w = 4
 
-        self.W_conv = np.random.randn(self.num_filters, 3, 3) * np.sqrt(2.0 / 9.0)
+        self.cnn_flat_size = self.num_filters * self.conv_out_h * self.conv_out_w
+        self.orig_flat_size = 4 * 5
+        self.flat_size = self.cnn_flat_size + self.orig_flat_size
+
+        self.W_conv = np.random.randn(self.num_filters, 2, 2) * np.sqrt(2.0 / 4.0)
         self.b_conv = np.zeros(self.num_filters)
 
         self.W_dense = np.random.randn(self.flat_size, self.num_classes) * np.sqrt(2.0 / self.flat_size)
@@ -53,11 +56,15 @@ class TrainableGridCNN:
         for f in range(self.num_filters):
             for r in range(self.conv_out_h):
                 for c in range(self.conv_out_w):
-                    window = x[r:r + 3, c:c + 3]
+                    window = x[r:r + 2, c:c + 2]
                     self.conv_out[f, r, c] = np.sum(window * self.W_conv[f]) + self.b_conv[f]
 
         self.act_out = self.relu(self.conv_out)
-        self.flat = self.act_out.flatten()
+
+        cnn_features = self.act_out.flatten()
+        orig_features = self.x_input.flatten()
+        self.flat = np.concatenate([cnn_features, orig_features])
+
         self.z_dense = np.dot(self.flat, self.W_dense) + self.b_dense
         self.probs = self.softmax(self.z_dense)
         return self.probs
@@ -68,7 +75,9 @@ class TrainableGridCNN:
         db_dense = dz_dense
 
         d_flat = np.dot(self.W_dense, dz_dense)
-        d_act_out = d_flat.reshape((self.num_filters, self.conv_out_h, self.conv_out_w))
+
+        d_cnn_flat = d_flat[:self.cnn_flat_size]
+        d_act_out = d_cnn_flat.reshape((self.num_filters, self.conv_out_h, self.conv_out_w))
         d_conv_out = d_act_out * self.relu_derivative(self.conv_out)
 
         dW_conv = np.zeros_like(self.W_conv)
@@ -78,7 +87,7 @@ class TrainableGridCNN:
             db_conv[f] = np.sum(d_conv_out[f])
             for r in range(self.conv_out_h):
                 for c in range(self.conv_out_w):
-                    window = self.x_input[r:r + 3, c:c + 3]
+                    window = self.x_input[r:r + 2, c:c + 2]
                     dW_conv[f] += d_conv_out[f, r, c] * window
 
         self.W_dense -= lr * dW_dense
@@ -204,14 +213,13 @@ class ParametricGridEngine:
         pts = [tuple(p) for p in points]
 
         if pattern == "intersection/cross":
-            # Upgraded Centroid-to-Extremes logic for + and X shapes
             mean_r = sum(p[0] for p in pts) / len(pts)
             mean_c = sum(p[1] for p in pts) / len(pts)
 
             dists = [(p, (p[0] - mean_r) ** 2 + (p[1] - mean_c) ** 2) for p in pts]
             dists.sort(key=lambda x: x[1], reverse=True)
 
-            endpoints = [d[0] for d in dists[:4]]  # Take the 4 furthest points
+            endpoints = [d[0] for d in dists[:4]]
             lines = []
             used = set()
 
@@ -280,14 +288,12 @@ def generate_robust_training_data():
 
     add_sample(empty_grid(), "empty")
 
-    # Points
     for r in range(4):
         for c in range(5):
             g = empty_grid();
             g[r][c] = True
             add_sample(g, "isolated point")
 
-    # Horizontals
     for r in range(4):
         for start_c in range(3):
             for length in range(3, 6 - start_c):
@@ -295,7 +301,6 @@ def generate_robust_training_data():
                 for c in range(start_c, start_c + length): g[r][c] = True
                 add_sample(g, "horizontal_line")
 
-    # Verticals
     for c in range(5):
         for start_r in range(2):
             for length in range(3, 5 - start_r):
@@ -303,7 +308,6 @@ def generate_robust_training_data():
                 for r in range(start_r, start_r + length): g[r][c] = True
                 add_sample(g, "vertical_line")
 
-    # Diagonals
     diagonals = [[(0, 0), (1, 1), (2, 2), (3, 3)], [(0, 1), (1, 2), (2, 3), (3, 4)], [(0, 2), (1, 3), (2, 4)],
                  [(1, 0), (2, 1), (3, 2)],
                  [(3, 0), (2, 1), (1, 2), (0, 3)], [(3, 1), (2, 2), (1, 3), (0, 4)], [(3, 2), (2, 3), (1, 4)],
@@ -313,7 +317,6 @@ def generate_robust_training_data():
         for r, c in diag: g[r][c] = True
         add_sample(g, "diagonal_line")
 
-    # Intersections (+ and T shapes)
     cross_anchors = [(1, 1), (1, 2), (1, 3), (2, 1), (2, 2), (2, 3)]
     for r, c in cross_anchors:
         g = empty_grid()
@@ -323,10 +326,8 @@ def generate_robust_training_data():
         g[r][c] = g[r][c - 1] = g[r][c + 1] = g[r + 1][c] = True
         add_sample(g, "intersection/cross")
 
-    # NEW: X-Shapes (Diagonal Intersections)
     for r in range(1, 3):
         for c in range(1, 4):
-            # Thin X
             g = empty_grid();
             g[r][c] = True
             if r - 1 >= 0 and c - 1 >= 0: g[r - 1][c - 1] = True
@@ -335,23 +336,24 @@ def generate_robust_training_data():
             if r + 1 < 4 and c + 1 < 5:   g[r + 1][c + 1] = True
             add_sample(g, "intersection/cross")
 
-            # Thick X (Like your test_grid)
             g = empty_grid()
-            g[r][c] = g[r][c + 1] = g[r + 1][c] = g[r + 1][c + 1] = True  # 2x2 core
+            g[r][c] = g[r][c + 1] = g[r + 1][c] = g[r + 1][c + 1] = True
             if r - 1 >= 0 and c - 1 >= 0: g[r - 1][c - 1] = True
             if r - 1 >= 0 and c + 2 < 5:  g[r - 1][c + 2] = True
             if r + 2 < 4 and c - 1 >= 0:  g[r + 2][c - 1] = True
             if r + 2 < 4 and c + 2 < 5:   g[r + 2][c + 2] = True
             add_sample(g, "intersection/cross")
 
-    # Curves
     curve_anchors = [(0, 0), (0, 1), (1, 0), (1, 1)]
     for r, c in curve_anchors:
         g = empty_grid();
         g[r][c] = g[r + 1][c] = g[r + 2][c] = g[r + 2][c + 1] = g[r + 2][c + 2] = True
         add_sample(g, "curve")
         g = empty_grid();
-        g[r][c] = g[r][c + 1] = g[r + 1][c] = g[r + 1][c + 2] = g[r + 2][c + 2] = True
+        g[r][c] = g[r][c + 1] = g[r + 1][c + 1] = g[r + 1][c + 2] = g[r + 2][c + 2] = True
+        add_sample(g, "curve")
+        g = empty_grid();
+        g[r][c] = g[r + 1][c] = g[r + 1][c + 1] = g[r + 1][c + 2] = g[r][c + 2] = True
         add_sample(g, "curve")
 
     combined = list(zip(X_train, y_train))
@@ -369,10 +371,10 @@ if __name__ == "__main__":
         engine.train_classifier(X_train, y_train)
 
     test_grid = [
-        [True, False, False, True, False],
-        [False, True, True, False, False],
-        [False, True, True, False, False],
-        [True, False, False, True, False]
+        [True, False, False, False, False],
+        [False, True, False, False, False],
+        [False, False, True, False, False],
+        [False, False, False, True, False]
     ]
 
     detected_shape = engine.classify(test_grid)
