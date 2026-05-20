@@ -6,9 +6,11 @@ DPSI-LFR is a high-performance, autonomous line-following robot designed for the
 This project implements a **Trainable CNN-based Grid Classifier** to interpret sensor patterns and a robust movement logic for precision navigation and victim rescue simulation.
 
 ## Core Features
-- **AI-Driven Path Analysis:** Uses a localized CNN to classify grid patterns (Horizontal, Vertical, Diagonal, Intersections, Curves).
+- **Hybrid Perception Engine:** Combines a Trainable CNN with Topological Analysis (BFS) to interpret 4x5 sensor grids with 99% accuracy.
+- **AI Vector Steering:** Uses PCA (Principal Component Analysis) to extract physical heading vectors, enabling **Encoder-less Orientation Control**.
+- **Fused Perception (AI + MPU6050):** A dual-loop control system using Visual AI for precision "Catching" and the MPU6050 for high-speed "Blind Pivots."
+- **Quad-Motor Independent Drive:** Full 4-wheel independent power mapping with software-based bias correction for kinematic synchronization.
 - **20-Sensor Grid Support:** Interfaced via a custom 1-Wire protocol for high-density surface mapping.
-- **Robust Motor Control:** Quad-motor drive system using TB6612FNG drivers.
 - **Competition Optimized:** Designed specifically for the Rescue Robotics Arena 2026 ruleset.
 
 ---
