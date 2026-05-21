@@ -1,16 +1,18 @@
 # DPSI-LFR: Autonomous Rescue Line Follower
 
 ## Overview
-DPSI-LFR is a high-performance, autonomous line-following robot designed for the **Rescue Robotics Arena** competition. The system leverages an ESP32 microcontroller and a custom 20-sensor IR grid (5x4) to navigate complex tracks featuring intersections, gaps, ramps, and obstacles.
+DPSI-LFR is a high-performance, autonomous line-following robot built on the **MC4.0 Industrial Chassis**. Designed for the **Rescue Robotics Arena** competition, the system leverages a **Distributed Triple-Processor Architecture** (M5 Core 2, ESP32 C3, and STM32) and a custom 20-sensor IR grid (5x4) to navigate complex tracks featuring intersections, gaps, ramps, and obstacles.
 
-This project implements a **Trainable CNN-based Grid Classifier** to interpret sensor patterns and a robust movement logic for precision navigation and victim rescue simulation.
+This project implements a **Trainable CNN-based Grid Classifier** and a **PCA-driven Visual Compass** for precision navigation and victim rescue simulation.
 
 ## Core Features
+- **Distributed Intelligence:** Triple-processor model offloading timing-critical tasks to dedicated MCUs for zero-latency control.
 - **Hybrid Perception Engine:** Combines a Trainable CNN with Topological Analysis (BFS) to interpret 4x5 sensor grids with 99% accuracy.
 - **AI Vector Steering:** Uses PCA (Principal Component Analysis) to extract physical heading vectors, enabling **Encoder-less Orientation Control**.
 - **Fused Perception (AI + MPU6050):** A dual-loop control system using Visual AI for precision "Catching" and the MPU6050 for high-speed "Blind Pivots."
-- **Quad-Motor Independent Drive:** Full 4-wheel independent power mapping with software-based bias correction for kinematic synchronization.
+- **MC4.0 Platform Control:** Quad-motor independent drive system using high-torque encoder motors and Mecanum wheels for omnidirectional maneuverability.
 - **20-Sensor Grid Support:** Interfaced via a custom 1-Wire protocol for high-density surface mapping.
+- **Web-Based Telemetry:** Live WebSocket dashboard for real-time sensor visualization and manual motor control.
 - **Competition Optimized:** Designed specifically for the Rescue Robotics Arena 2026 ruleset.
 
 ---
