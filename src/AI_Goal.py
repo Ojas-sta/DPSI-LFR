@@ -187,10 +187,14 @@ class ParametricGridEngine:
 
         if self.trained:
             probs = self.cnn.forward(matrix)
-            cnn_prediction = self.cnn.classes[np.argmax(probs)]
+            best_idx = np.argmax(probs)
+            cnn_prediction = self.cnn.classes[best_idx]
+
+            # Trust the neural model output directly if it registers structural context
             if cnn_prediction != "empty":
                 return cnn_prediction
 
+        # Classical Fallback Heuristics
         comps = self.get_components(matrix)
         if not comps: return "empty"
         if len(comps) > 1: return "multiple disconnected shapes"
@@ -200,9 +204,23 @@ class ParametricGridEngine:
         rows = [p[0] for p in comps[0]]
         cols = [p[1] for p in comps[0]]
 
-        if max_deg >= self.cfg["INTERSECTION_MIN_NEIGHBORS"]: return "intersection/cross"
-        if len(set(rows)) == 1: return "horizontal_line"
-        if len(set(cols)) == 1: return "vertical_line"
+        if max_deg >= self.cfg["INTERSECTION_MIN_NEIGHBORS"]:
+            return "intersection/cross"
+        if len(set(rows)) == 1:
+            return "horizontal_line"
+        if len(set(cols)) == 1:
+            return "vertical_line"
+
+        # Robust Diagonal Line vs Curve check using linear correlation tracking
+        if len(comps[0]) >= 3:
+            r_arr = np.array(rows)
+            c_arr = np.array(cols)
+            # Find correlation coefficient matrix
+            corr = np.corrcoef(r_arr, c_arr)[0, 1]
+            # High correlation means points follow a highly direct diagonal line trajectory
+            if abs(corr) > 0.85:
+                return "diagonal_line"
+
         return "curve"
 
     def extract_lines(self, grid):
@@ -290,7 +308,7 @@ def generate_robust_training_data():
 
     for r in range(4):
         for c in range(5):
-            g = empty_grid();
+            g = empty_grid()
             g[r][c] = True
             add_sample(g, "isolated point")
 
@@ -328,7 +346,7 @@ def generate_robust_training_data():
 
     for r in range(1, 3):
         for c in range(1, 4):
-            g = empty_grid();
+            g = empty_grid()
             g[r][c] = True
             if r - 1 >= 0 and c - 1 >= 0: g[r - 1][c - 1] = True
             if r - 1 >= 0 and c + 1 < 5:  g[r - 1][c + 1] = True
@@ -346,13 +364,13 @@ def generate_robust_training_data():
 
     curve_anchors = [(0, 0), (0, 1), (1, 0), (1, 1)]
     for r, c in curve_anchors:
-        g = empty_grid();
+        g = empty_grid()
         g[r][c] = g[r + 1][c] = g[r + 2][c] = g[r + 2][c + 1] = g[r + 2][c + 2] = True
         add_sample(g, "curve")
-        g = empty_grid();
+        g = empty_grid()
         g[r][c] = g[r][c + 1] = g[r + 1][c + 1] = g[r + 1][c + 2] = g[r + 2][c + 2] = True
         add_sample(g, "curve")
-        g = empty_grid();
+        g = empty_grid()
         g[r][c] = g[r + 1][c] = g[r + 1][c + 1] = g[r + 1][c + 2] = g[r][c + 2] = True
         add_sample(g, "curve")
 
@@ -373,8 +391,8 @@ if __name__ == "__main__":
     test_grid = [
         [True, False, False, False, False],
         [False, True, False, False, False],
-        [False, False, True, False, False],
-        [False, False, False, True, False]
+        [False, True, False, False, False],
+        [True, False, False, False, False]
     ]
 
     detected_shape = engine.classify(test_grid)
