@@ -50,12 +50,23 @@ This project implements a **Trainable CNN-based Grid Classifier** to interpret s
 
 ---
 
+## Development Log
+Detailed records of technical breakthroughs and session updates can be found in the [FEATURE_LOG.md](./FEATURE_LOG.md).
+
+**Latest Major Update (2026-05-20):**
+- Implementation of **Distributed Architecture** (M5 Core 2 + ESP32 C3).
+- Launch of **Ultra-Low Latency WebSocket Telemetry** interface.
+- Integration of **PCA-based AI Vector Steering** for encoder-less control.
+
+---
+
 ## Directory Structure
 ```text
 DPSI-LFR/
 ├── docs/               # Technical documentation and competition rules
 ├── src/                # Source code for ESP32 and AI models
 ├── resources/          # Circuit diagrams and design links
+├── FEATURE_LOG.md      # Timestamped development and feature log
 └── README.md           # Project Overview
 ```
 
