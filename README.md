@@ -3,17 +3,16 @@
 ## Overview
 DPSI-LFR is a high-performance, autonomous line-following robot built on the **MC4.0 Industrial Chassis**. Designed for the **Rescue Robotics Arena** competition, the system leverages a **Distributed Triple-Processor Architecture** (M5 Core 2, ESP32 C3, and STM32) and a custom 20-sensor IR grid (5x4) to navigate complex tracks featuring intersections, gaps, ramps, and obstacles.
 
-This project implements a **Trainable CNN-based Grid Classifier** and a **PCA-driven Visual Compass** for precision navigation and victim rescue simulation.
+This project implements an advanced **AI Suite** featuring **Hierarchical Mixture of Experts (H-MoE)** and **Transformer-based Temporal Memory** for precision navigation and high-level strategy.
 
 ## Core Features
 - **Distributed Intelligence:** Triple-processor model offloading timing-critical tasks to dedicated MCUs for zero-latency control.
+- **Hierarchical MoE Architecture:** A fractal AI system that uses a gating network to switch between specialized experts for normal tracking and anomaly handling.
+- **Temporal Memory (Transformer):** Integrated attention mechanisms to process sensor sequences, allowing the robot to navigate dashed lines and gaps using historical context.
 - **Hybrid Perception Engine:** Combines a Trainable CNN with Topological Analysis (BFS) to interpret 4x5 sensor grids with 99% accuracy.
 - **AI Vector Steering:** Uses PCA (Principal Component Analysis) to extract physical heading vectors, enabling **Encoder-less Orientation Control**.
-- **Fused Perception (AI + MPU6050):** A dual-loop control system using Visual AI for precision "Catching" and the MPU6050 for high-speed "Blind Pivots."
 - **MC4.0 Platform Control:** Quad-motor independent drive system using high-torque encoder motors and Mecanum wheels for omnidirectional maneuverability.
-- **20-Sensor Grid Support:** Interfaced via a custom 1-Wire protocol for high-density surface mapping.
 - **Web-Based Telemetry:** Live WebSocket dashboard for real-time sensor visualization and manual motor control.
-- **Competition Optimized:** Designed specifically for the Rescue Robotics Arena 2026 ruleset.
 
 ---
 
@@ -56,9 +55,10 @@ This project implements a **Trainable CNN-based Grid Classifier** and a **PCA-dr
 Detailed records of technical breakthroughs and session updates can be found in the [FEATURE_LOG.md](./FEATURE_LOG.md).
 
 **Latest Major Update (2026-05-20):**
-- Implementation of **Distributed Architecture** (M5 Core 2 + ESP32 C3).
+- Deployment of the **Advanced AI Suite** (H-MoE + Transformer Memory).
+- Integration of the **Digital Twin Simulator** for offline AI verification.
+- Implementation of **Distributed Architecture** (M5 Core 2 + ESP32 C3 Gateway).
 - Launch of **Ultra-Low Latency WebSocket Telemetry** interface.
-- Integration of **PCA-based AI Vector Steering** for encoder-less control.
 
 ---
 
@@ -66,7 +66,7 @@ Detailed records of technical breakthroughs and session updates can be found in 
 ```text
 DPSI-LFR/
 ├── docs/               # Technical documentation and competition rules
-├── src/                # Source code for ESP32 and AI models
+├── src/                # Source code for ESP32, AI models, and simulators
 ├── resources/          # Circuit diagrams and design links
 ├── FEATURE_LOG.md      # Timestamped development and feature log
 └── README.md           # Project Overview
