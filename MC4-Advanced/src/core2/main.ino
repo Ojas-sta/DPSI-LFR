@@ -1,90 +1,124 @@
 #include <Arduino.h>
 #include <Wire.h>
+#include <WiFi.h>
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
+#include <ESPmDNS.h>
+#include "WeMultipleLineFollower.h"
 #include "M5Module4EncoderMotor.h"
 
-// Hardware Configuration
+// Hardware Configuration - ESP32-S NodeMCU
+#define SENSOR_DATA_PIN 26 // Using GPIO 26 for 1-Wire
+#define I2C_SDA 21         // Standard ESP32 SDA
+#define I2C_SCL 22         // Standard ESP32 SCL
+
+// Objects
+WeMultipleLineFollower lineFollower(SENSOR_DATA_PIN);
 M5Module4EncoderMotor driver;
-#define MPU6886_ADDR 0x68
+AsyncWebServer server(80);
+AsyncWebSocket ws("/ws");
 
-// Global State
+// State
 uint8_t sData[5] = {0};
-int32_t enc[4] = {0};
-float vBat = 0;
-float yaw = 0;
+int motorSpeed = 120;
 
-// Minimal MPU6886 Driver for Standalone Use
-void initMPU() {
-    Wire.beginTransmission(MPU6886_ADDR);
-    Wire.write(0x6B); // PWR_MGMT_1
-    Wire.write(0x00); // Wake up
-    Wire.endTransmission();
+const char* ssid = "MC4_ESP32S_Direct";
+const char* password = "password123";
+
+// --- Web UI (Futuristic Dashboard) ---
+const char index_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE html><html><head>
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<style>
+    body { font-family: 'Courier New', monospace; background: #000; color: #0f0; text-align: center; margin: 0; }
+    .grid { display: grid; grid-template-columns: repeat(5, 40px); gap: 8px; justify-content: center; margin: 30px auto; }
+    .cell { width: 40px; height: 40px; background: #111; border: 1px solid #222; border-radius: 4px; }
+    .on { background: #0f0; box-shadow: 0 0 15px #0f0; }
+    .btn { width: 90px; height: 90px; margin: 5px; border-radius: 15px; border: 2px solid #333; background: #111; color: #0f0; font-size: 30px; touch-action: none; cursor: pointer; }
+    .btn:active { background: #0f0; color: #000; }
+</style></head>
+<body>
+    <h2 style="margin-top:20px;">ESP32-S PILOT</h2>
+    <div class="grid" id="g"></div>
+    <div id="ctrl">
+        <button class="btn" onpointerdown="m('F')" onpointerup="m('S')">▲</button><br>
+        <button class="btn" onpointerdown="m('L')" onpointerup="m('S')">◀</button>
+        <button class="btn" onclick="m('S')" style="color:red;border-color:red">■</button>
+        <button class="btn" onpointerdown="m('R')" onpointerup="m('S')">▶</button><br>
+        <button class="btn" onpointerdown="m('B')" onpointerup="m('S')">▼</button>
+    </div>
+    <script>
+        let socket = new WebSocket('ws://' + window.location.hostname + '/ws');
+        socket.onmessage = (e) => {
+            let d = JSON.parse(e.data);
+            let h = '';
+            for(let r=0; r<4; r++) for(let c=0; c<5; c++) h += `<div class="cell ${(d.s[c] >> r) & 1 ? 'on' : ''}"></div>`;
+            document.getElementById('g').innerHTML = h;
+        };
+        function m(d) { if(socket.readyState===1) socket.send(d); }
+    </script>
+</body></html>)rawliteral";
+
+void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
+    char dir = (char)data[0];
+    int s = motorSpeed;
+    if(dir == 'F') { driver.setMotorSpeed(0, 127+s); driver.setMotorSpeed(2, 127-s); }
+    else if(dir == 'B') { driver.setMotorSpeed(0, 127-s); driver.setMotorSpeed(2, 127+s); }
+    else if(dir == 'L') { driver.setMotorSpeed(0, 127-s); driver.setMotorSpeed(2, 127-s); }
+    else if(dir == 'R') { driver.setMotorSpeed(0, 127+s); driver.setMotorSpeed(2, 127+s); }
+    else { for(int i=0; i<4; i++) driver.setMotorSpeed(i, 127); }
 }
 
-void readYaw() {
-    // Note: A full AHRS filter without M5Core2.h is complex. 
-    // We will read raw Z-axis gyro as a placeholder for heading delta.
-    Wire.beginTransmission(MPU6886_ADDR);
-    Wire.write(0x47); // GYRO_ZOUT_H
-    Wire.endTransmission(false);
-    Wire.requestFrom(MPU6886_ADDR, 2);
-    int16_t gz = (Wire.read() << 8) | Wire.read();
-    yaw += (gz / 131.0) * 0.01; // Rough integration at 100Hz
+void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
+    if (type == WS_EVT_DATA) handleWebSocketMessage(arg, data, len);
 }
 
 void setup() {
-    // Start standard Serial for debug
     Serial.begin(115200);
-    
-    // Internal I2C for IMU (Core 2 standard: SDA=21, SCL=22)
-    Wire.begin(21, 22);
-    initMPU();
 
-    // Motor Module on Wire1 (Standard stacking pins 21/22 or external 32/33)
-    // Using the user-provided example pinout: 21, 22
-    while (!driver.begin(&Wire, MODULE_4ENCODERMOTOR_ADDR, 21, 22)) {
-        Serial.println("Waiting for Motor Module...");
+    // 1. Initialize I2C for Motor Module (Standard ESP32 SDA=21, SCL=22)
+    Wire.begin(I2C_SDA, I2C_SCL);
+    while (!driver.begin(&Wire, MODULE_4ENCODERMOTOR_ADDR, I2C_SDA, I2C_SCL)) {
+        Serial.println("Waiting for Motor Module on SDA 21, SCL 22...");
         delay(500);
     }
 
-    // High-speed UART to C3 (RX=13, TX=14)
-    Serial2.begin(460800, SERIAL_8N1, 13, 14);
+    // 2. Initialize Line Follower
+    lineFollower.openLED();
+
+    // 3. Network Setup
+    WiFi.softAP(ssid, password);
+    if (MDNS.begin("mc4")) {
+        MDNS.addService("http", "tcp", 80);
+    }
     
-    Serial.println("ULTRA-CORE STANDALONE: READY");
+    ws.onEvent(onEvent);
+    server.addHandler(&ws);
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+        request->send_P(200, "text/html", index_html);
+    });
+    server.begin();
+    
+    Serial.println("ESP32-S CONTROLLER: ACTIVE");
 }
 
 void loop() {
-    // 1. Handle Serial Inputs from C3 Gateway
-    if (Serial2.available() > 0 && Serial2.read() == 0xAA) {
-        uint8_t type = Serial2.read();
-        if (type == 0x01) { // Sensor Data
-            Serial2.readBytes(sData, 5);
-            Serial2.read(); // checksum skip
-        } else if (type == 0x02) { // Motor Cmd
-            char cmd = Serial2.read(); Serial2.read();
-            int spd = 120;
-            if(cmd == 'F') { driver.setMotorSpeed(0, 127+spd); driver.setMotorSpeed(2, 127-spd); }
-            else if(cmd == 'B') { driver.setMotorSpeed(0, 127-spd); driver.setMotorSpeed(2, 127+spd); }
-            else if(cmd == 'L') { driver.setMotorSpeed(0, 127-spd); driver.setMotorSpeed(2, 127-spd); }
-            else if(cmd == 'R') { driver.setMotorSpeed(0, 127+spd); driver.setMotorSpeed(2, 127+spd); }
-            else { for(int i=0; i<4; i++) driver.setMotorSpeed(i, 127); }
-        }
-    }
+    // Read Sensors
+    lineFollower.startRead();
+    sData[0] = lineFollower.readSensor1();
+    sData[1] = lineFollower.readSensor2();
+    sData[2] = lineFollower.readSensor3();
+    sData[3] = lineFollower.readSensor4();
+    sData[4] = lineFollower.readSensor5();
 
-    // 2. Gather Telemetry
-    for(int i=0; i<4; i++) enc[i] = driver.getEncoderValue(i);
-    vBat = driver.getAnalogInput(_8bit) / 255.0 * 3.3 / 0.16;
-    readYaw();
-
-    // 3. Send Telemetry to C3 Gateway
-    static unsigned long lastT = 0;
-    if (millis() - lastT > 50) {
-        Serial2.write(0xAA);
-        Serial2.write(0x03);
-        Serial2.printf("{\"s\":[%d,%d,%d,%d,%d],\"m\":[%d,%d,%d,%d],\"v\":%.1f,\"a\":%.1f}\n",
-                       sData[0], sData[1], sData[2], sData[3], sData[4],
-                       enc[0], enc[1], enc[2], enc[3], vBat, yaw);
-        lastT = millis();
+    // Stream Telemetry via WebSocket (20Hz)
+    static unsigned long lastWs = 0;
+    if (millis() - lastWs > 50) {
+        String json = "{\"s\":[" + String(sData[0]) + "," + String(sData[1]) + "," + 
+                      String(sData[2]) + "," + String(sData[3]) + "," + String(sData[4]) + "]}";
+        ws.textAll(json);
+        lastWs = millis();
     }
     
-    delay(10); // Maintain 100Hz loop
+    ws.cleanupClients();
 }
