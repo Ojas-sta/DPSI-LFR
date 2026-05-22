@@ -97,7 +97,7 @@ class TrainableGridCNN:
 
         return -np.sum(y_true * np.log(self.probs + 1e-15))
 
-    def train(self, X_train, y_train_labels, epochs=1000, lr=0.01):
+    def train(self, X_train, y_train_labels, epochs=10000, lr=0.01):
         num_samples = len(y_train_labels)
         for epoch in range(epochs):
             total_loss = 0.0
@@ -389,10 +389,10 @@ if __name__ == "__main__":
         engine.train_classifier(X_train, y_train)
 
     test_grid = [
-        [True, False, False, False, False],
-        [False, True, False, False, False],
-        [False, True, False, False, False],
-        [True, False, False, False, False]
+        [True, False, False, True, False],
+        [False, True, True, False, False],
+        [False, True, True, False, False],
+        [True, False, False, True, False]
     ]
 
     detected_shape = engine.classify(test_grid)
