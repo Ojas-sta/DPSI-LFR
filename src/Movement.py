@@ -126,7 +126,29 @@ def extract_native_vector(lines):
     return [float(dx), float(dy)]
 
 
-d
+def process_with_transformer(sensor_grid):
+    global history_buffer
+
+    bool_grid = convert(sensor_grid)
+    lines = engine.extract_lines(bool_grid)
+    vector = extract_native_vector(lines)
+
+    flat_grid = [float(cell) for row in sensor_grid for cell in row]
+    history_buffer.append(flat_grid + vector)
+
+    if len(history_buffer) > MAX_HISTORY:
+        history_buffer.pop(0)
+
+    seq_tensor = torch.tensor([history_buffer], dtype=torch.float32)
+    with torch.no_grad():
+        predictions = transformer_model(seq_tensor)[0]
+        pred_speed = predictions[0].item()
+        pred_angle = predictions[1].item()
+
+    return pred_speed, pred_angle, vector
+
+
+# --- Example Pipeline Sequence ---
 
 sensor_sequence = [
     [

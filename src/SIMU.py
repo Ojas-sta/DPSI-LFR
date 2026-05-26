@@ -11,7 +11,6 @@ print("Loading Systems...")
 engine = ParametricGridEngine(AI_CONFIG)
 
 
-
 class RobotTransformer(nn.Module):
     def __init__(self, input_dim=22, d_model=64, nhead=4, num_layers=2):
         super(RobotTransformer, self).__init__()
@@ -35,7 +34,6 @@ def load_weights(model, filepath):
         model.load_state_dict(state_dict)
         return True
     return False
-
 
 
 transformer_model = RobotTransformer()
@@ -65,7 +63,6 @@ def extract_native_vector(lines):
 def process_with_transformer(sensor_grid):
     global history_buffer
 
-
     bool_grid = [[bool(col) for col in row] for row in sensor_grid]
     lines = engine.extract_lines(bool_grid)
     vector = extract_native_vector(lines)
@@ -74,21 +71,17 @@ def process_with_transformer(sensor_grid):
     history_buffer.append(flat_grid + vector)
     history_buffer.pop(0)
 
-
     seq_tensor = torch.tensor([history_buffer], dtype=torch.float32)
     with torch.no_grad():
         predictions = transformer_model(seq_tensor)[0]
         pred_speed = predictions[0].item()
         pred_angle_normalized = predictions[1].item()
 
-
     actual_turn = pred_angle_normalized * 180.0
-
 
     pred_speed = max(0.0, pred_speed)
 
     return pred_speed, actual_turn
-
 
 
 pygame.init()
@@ -115,7 +108,6 @@ def point_to_segment_dist(px, py, x1, y1, x2, y2):
     return math.hypot(px - proj_x, py - proj_y)
 
 
-
 print("\nCONTROLS:")
 print("- Click and drag to draw a thick path (start on top of the blue robot).")
 print("- Try drawing a DASHED line or leaving a gap to test the Transformer's memory!")
@@ -125,7 +117,6 @@ running = True
 while running:
     screen.fill((255, 255, 255))
 
-
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
@@ -133,7 +124,6 @@ while running:
             if event.key == pygame.K_SPACE and mode == "draw":
                 print("\n--- SWITCHING TO AUTONOMOUS TRACKING ---")
                 mode = "follow"
-
 
     if mode == "draw":
         mouse_buttons = pygame.mouse.get_pressed()
@@ -147,13 +137,11 @@ while running:
         else:
             last_pos = None
 
-
     LINE_THICKNESS = 16
     for (x1, y1, x2, y2) in paths:
         pygame.draw.line(screen, (0, 0, 0), (x1, y1), (x2, y2), LINE_THICKNESS)
         pygame.draw.circle(screen, (0, 0, 0), (x1, y1), LINE_THICKNESS // 2)
         pygame.draw.circle(screen, (0, 0, 0), (x2, y2), LINE_THICKNESS // 2)
-
 
     H_rad = math.radians(heading)
     f_x = math.cos(H_rad)
@@ -161,7 +149,6 @@ while running:
 
     l_x = math.cos(H_rad + math.pi / 2)
     l_y = -math.sin(H_rad + math.pi / 2)
-
 
     CELL_SIZE = 14
     SENSOR_RADIUS = 6
@@ -190,7 +177,6 @@ while running:
 
             pygame.draw.circle(screen, color, (int(sx), int(sy)), SENSOR_RADIUS)
 
-
     if mode == "follow":
 
         speed, transformer_angle = process_with_transformer(sensor_data)
@@ -198,26 +184,21 @@ while running:
         if speed > 0:
             active_cols = [c for r in range(4) for c in range(5) if sensor_data[r][c] == 1]
 
-
             offset_angle = 0.0
             if active_cols:
                 avg_c = sum(active_cols) / len(active_cols)
                 offset_error = avg_c - 2.0
                 offset_angle = offset_error * 25.0
 
-
             target_steering_angle = transformer_angle + offset_angle
-
 
             smooth_steering += (target_steering_angle - smooth_steering) * 0.65
 
             STEERING_SENSITIVITY = 0.15
             heading -= (smooth_steering * STEERING_SENSITIVITY)
 
-
             rx += f_x * (speed * 4.0)
             ry += f_y * (speed * 4.0)
-
 
     p1 = (rx + f_x * 20, ry + f_y * 20)  # Nose
     p2 = (rx - f_x * 10 + l_x * 14, ry - f_y * 10 + l_y * 14)  # Back Left
