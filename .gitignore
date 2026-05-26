@@ -8,8 +8,6 @@ venv/
 ENV/
 
 # Large Model Weights (Exclude from Git)
-agent_weights.json
-fractal_moe_workspace.json
 
 # IDEs
 .idea/
