@@ -1,80 +1,74 @@
-# DPSI-LFR: Autonomous Rescue Line Follower (v2)
-
-## Overview
-DPSI-LFR v2 is a completely overhauled, high-performance autonomous line-following robot designed for the **Rescue Robotics Arena** competition. Moving away from the heavy v1 mecanum chassis, v2 utilizes a **smaller, custom 2-layered chassis** with a **differential drive system**.
-
-To achieve both high-speed precision and advanced strategic navigation, the robot uses a dual-brain architecture: a **Raspberry Pi 4B** handles heavy computer vision and AI pathfinding, while an **ESP32-S3** manages real-time, low-latency motor control and sensor polling.
-
-## Core Features (v2 Architecture)
-- **Differential Drive System:** 2x 600 RPM high-speed motors with a rear caster for agile, rapid maneuvering.
-- **Dual-Brain Processing:** 
-  - **Raspberry Pi 4B:** Runs the high-level Python AI stack, OpenCV camera vision (detecting green dots, gaps, and intersections), and hosts the WebSocket telemetry dashboard.
-  - **ESP32-S3:** Runs C++ firmware for hard-real-time tasks—polling the 10 IR sensors and executing rapid PID motor control loops.
-- **Discrete IR Sensing:** Replaced the sluggish 1-Wire protocol with direct GPIO polling of 10x IR Sensors (two 5-Channel TCRT5000 arrays) for zero-latency line detection.
-- **High-Speed Serial Bridge:** The Pi and ESP32-S3 communicate via a rapid UART/USB serial protocol to exchange telemetry and motor commands seamlessly.
+<div align="center">
+  <h1>🤖 DPSI-LFR: V2 Differential Drive Architecture</h1>
+  <p><strong>A Dual-Brain Autonomous Line Following Robot built with Raspberry Pi 4B & ESP32-S3</strong></p>
+</div>
 
 ---
 
-## Technical Specifications
+## ⚡ TL;DR
+The DPSI-LFR V2 is a highly robust, dual-processor autonomous robot. It splits responsibilities across two discrete brains: 
+1. An **ESP32-S3** handles ultra-fast, hard real-time operations (PID line following at 100Hz, IMU gyro integration at 200Hz, and motor PWM control) using a multi-threaded FreeRTOS environment.
+2. A **Raspberry Pi 4B** handles high-level intelligence (OpenCV perspective warping, HSV green dot detection, and master state-machine navigation).
 
-### Hardware List
-- **Primary Brain:** Raspberry Pi 4B (Python / OpenCV)
-- **Vision:** Raspberry Pi Camera
-- **Real-Time Controller:** ESP32-S3 (Arduino/C++)
-- **Chassis:** Custom 2-layered small footprint chassis
-- **Motors:** 2x 12V 600 RPM DC Motors
-- **Motor Driver:** Dual H-Bridge (e.g., L298N)
-- **Sensors:** 10x IR Sensors (2x 5-Channel TCRT5000)
-
-### ESP32-S3 Pinout Configuration
-*(Safely avoids all internal flash, USB, and dangerous strapping pins)*
-
-**Motor Driver (L298N)**
-| Component | Pin | Function |
-| :--- | :--- | :--- |
-| **ENA** | GPIO 4 | Left Motor PWM (Speed) |
-| **IN1** | GPIO 5 | Left Motor Forward |
-| **IN2** | GPIO 6 | Left Motor Reverse |
-| **IN3** | GPIO 7 | Right Motor Forward |
-| **IN4** | GPIO 15 | Right Motor Reverse |
-| **ENB** | GPIO 16 | Right Motor PWM (Speed) |
-
-**Sensor Array 1 (Front - 5x IR)**
-| Sensor | Pin |
-| :--- | :--- |
-| **S1** | GPIO 8 |
-| **S2** | GPIO 9 |
-| **S3** | GPIO 10 |
-| **S4** | GPIO 11 |
-| **S5** | GPIO 12 |
-
-**Sensor Array 2 (Left/Secondary - 5x IR)**
-| Sensor | Pin |
-| :--- | :--- |
-| **S1** | GPIO 13 |
-| **S2** | GPIO 14 |
-| **S3** | GPIO 17 |
-| **S4** | GPIO 18 |
-| **S5** | GPIO 21 |
+They communicate via a robust USB Serial link (`/dev/ttyUSB0`) utilizing a custom binary packet structure with CRC-16 integrity validation.
 
 ---
 
-## Directory Structure
-Development has moved entirely to the new `v2` directories. Legacy v1 code has been archived for reference.
+## 🧠 Dual-Brain Architecture
 
-```text
-DPSI-LFR/
-├── v2_pi_core/           # (NEW) Raspberry Pi 4B code (Python, OpenCV, WebSockets)
-├── v2_esp32_firmware/    # (NEW) ESP32-S3 code (C++, PID loops, Sensor drivers)
-├── docs/                 # Technical documentation and competition rules
-├── claude_context.md     # v2 Architecture Migration Guide
-├── BreadboardTest/       # (ARCHIVED) v1 testing scripts
-├── MecanumWebControl/    # (ARCHIVED) v1 quad-motor control
-└── README.md             # Project Overview
-```
+### 1. The High-Level Brain: Raspberry Pi 4B (Python 3 & OpenCV)
+The Raspberry Pi acts as the master commander. It does not worry about keeping the robot on the line; instead, it looks ahead for intersections and obstacles.
+- **Vision Pipeline**: Processes a 640x480 @ 30FPS camera feed. It applies a mathematical Homography matrix (perspective warp) to correct a 20-degree downward camera tilt into a top-down metric view.
+- **Intersection Analysis**: Uses HSV color thresholding to detect Green Dots indicating left turns, right turns, or U-turns.
+- **Master FSM (Finite State Machine)**: Controls the overarching state of the robot (e.g., `STATE_LINE_FOLLOWING`, `STATE_INTERSECTION_DECISION`) and issues macro-commands down to the ESP32.
 
-## Setup & Migration
-For complete details on the migration from the v1 Mecanum setup to the new v2 Differential setup, please refer to the [v2 Migration Guide](./claude_context.md).
+### 2. The Real-Time Brain: ESP32-S3 (C++ & FreeRTOS)
+The ESP32-S3 handles the physical world. It guarantees deterministic execution times for motor control, preventing the robot from oscillating at high speeds.
+- **Sensors**: Reads a 10x TCRT5000 IR sensor array (mounted as a single wide line) and an MPU6050 IMU over I2C.
+- **Actuators**: Drives an L298N dual H-Bridge connected to 2x 12V 600RPM motors.
+- **Debugging UI**: Updates a 0.96" I2C OLED display with real-time telemetry (no physical push buttons are used).
 
 ---
-© 2026 DPSI Rescue Robotics Team. All rights reserved.
+
+## 🧵 FreeRTOS Task Allocation (ESP32-S3)
+To ensure the IMU integration never drifts and the PID loop never stutters, the ESP32 utilizes its dual-core architecture via FreeRTOS:
+
+* **Core 0: `Task_IMU_Polling` (Priority 5, 200Hz)**
+  * *Purpose*: The most critical task. Continuously polls the MPU6050 Z-axis gyro and performs trapezoidal integration to maintain a drift-compensated, absolute heading (`g_current_yaw`).
+* **Core 1: `Task_LineFollow_PID` (Priority 4, 100Hz)**
+  * *Purpose*: Reads the 10 IR digital inputs, computes a weighted center-of-gravity position error, evaluates the discrete PID output, and drives the L298N PWM. Also handles closed-loop 90-degree pivot turns using IMU feedback.
+* **Core 1: `Task_Serial_Parser` (Priority 3, Event-Driven)**
+  * *Purpose*: Listens to the UART bus, decodes incoming binary packets from the Pi, verifies the CRC-16 checksum, and dispatches commands.
+* **Core 1: `Task_OLED_Display` (Priority 1, 10Hz)**
+  * *Purpose*: Renders real-time telemetry (IR bitmask, integrated yaw, motor PWM) to the SSD1306 OLED screen for physical debugging.
+
+---
+
+## 📡 Communication Protocol
+The Pi and ESP32 are connected via a physical USB cable acting as a UART Serial bridge (`/dev/ttyUSB0`) running at 115,200 baud. 
+- **Packet Structure**: Every transmission uses a custom 8-byte binary frame: `[START_BYTE] [OPCODE] [PAYLOAD_1..4] [CRC_H] [CRC_L]`.
+- **Integrity**: A CRC-16-CCITT checksum ensures that electrical noise from the DC motors does not corrupt serial commands.
+- **Watchdog/Heartbeat**: The Pi continuously sends `HEARTBEAT_PING` packets. If the ESP32 does not receive a ping within a defined timeout (e.g., the Pi crashes or the USB unplugs), the ESP32 triggers an emergency motor halt.
+
+---
+
+## 📚 AI-KOS Knowledge Base (Markdown Blueprints)
+This repository was architected using the **AI-KOS (AI Knowledge Operating System)** framework. The extensive architectural blueprints are located in the `AI-KOS/` directory:
+
+### Core Context
+* `CurrentTask.md`: The living, high-level blueprint outlining the exact hardware specifications, geometry (140mm track width, 180mm caster distance), and division of labor.
+* `Claude_Code_Prompt.md`: The massive 22KB synthesized prompt that was used to generate the Python and C++ codebases.
+
+### Architecture Deep Dives (`AI-KOS/knowledge/04 Architecture/`)
+* `Hardware_Pinout_and_Specs.md`: Documents every GPIO pin mapping, power distribution logic (12V battery vs 5.1V logic rails), and differential kinematics math.
+* `ESP32_FreeRTOS_Architecture.md`: Deep dive into the RTOS scheduling, the 10-sensor weighted PID algorithm, and the IMU pivot turn control theory.
+* `RaspberryPi_Vision_and_Navigation.md`: Documents the mathematical Homography matrix formulations, OpenCV processing pipelines, and FSM transition tables.
+* `Serial_Communication_Protocol.md`: Defines the exact binary packet structure, supported opcodes (e.g., `<TURN_90_LEFT>`, `<SET_SPEEDS>`), and the CRC-16 generation algorithm.
+* `diagram1.md`: A Mermaid graph visualizing the hardware data flow and subsystem connections.
+
+### Development Contracts (`AI-KOS/knowledge/06 Development/`)
+* `File_Structure_and_Component_Design.md`: The structural contract binding the C++ (`v2_esp32_firmware/`) and Python (`v2_pi_core/`) directories together, establishing class boundaries and function signatures.
+
+---
+
+*Note: For an interactive map of these documents, refer to the `DPSI_LFR_Obsidian_Hub.md` file in the root directory if you are using Obsidian.*
