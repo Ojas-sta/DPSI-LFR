@@ -12,6 +12,7 @@ Generate the first functional codebase for the V2 Differential Drive Robot.
   - **Line Following**: 10x TCRT5000 IR Sensors mounted as **one single wide line** across the front.
   - **Odometry**: MPU6050 IMU Gyro on the ESP32 (I2C) for exact 90-degree intersection turns.
   - **Vision**: Pi Camera angled **20 degrees down** (requires OpenCV perspective warp).
+  - **Debugging/UI**: 0.96-inch I2C OLED Display and 2x Push Buttons wired to the ESP32-S3 for local debugging, start/stop control, and menu selection.
 
 ## Division of Labor
 - **ESP32-S3 (Hard Real-Time)**
@@ -19,6 +20,7 @@ Generate the first functional codebase for the V2 Differential Drive Robot.
   - Runs a dedicated **FreeRTOS task on Core 0** continuously polling and integrating the MPU6050 Z-axis gyro to maintain an exact heading.
   - Accepts `<L_SPEED>,<R_SPEED>` commands from the Pi.
   - Accepts `<TURN_90_LEFT>` commands from the Pi, at which point it uses the IMU to execute a perfect pivot turn.
+  - Updates the 0.96" OLED with live sensor states and PID variables. Uses the 2 push buttons to trigger calibration, start, or stop.
 
 - **Raspberry Pi 4B (High-Level Logic)**
   - Reads camera frames, applies perspective warp for the 20-degree tilt.
@@ -30,7 +32,8 @@ Generate the first functional codebase for the V2 Differential Drive Robot.
 **1. `v2_esp32_firmware/` (Arduino/C++)**
 - `v2_esp32_firmware.ino`: Main setup and Core 1 loop (Line Following PID & Serial parsing).
 - `IMU_Task.h`: FreeRTOS task pinned to Core 0 that handles the MPU6050.
-- `Config.h`: GPIO mappings for L298N (ENA, IN1, IN2, IN3, IN4, ENB) and 10x IR sensors.
+- `Config.h`: GPIO mappings for L298N (ENA, IN1, IN2, IN3, IN4, ENB), 10x IR sensors, 2x Push Buttons, and I2C (SDA/SCL) for the OLED and MPU6050.
+- `DisplayUI.h`: Manages drawing telemetry and menus to the 0.96" OLED.
 
 **2. `v2_pi_core/` (Python)**
 - `main.py`: Main state machine.
