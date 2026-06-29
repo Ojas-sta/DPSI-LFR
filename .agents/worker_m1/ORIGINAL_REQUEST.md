@@ -1,55 +1,39 @@
-## 2026-06-29T13:38:59Z
+## 2026-06-29T08:53:46Z
+Role: Specialist Worker for Technical Blueprint Generation
+Working Directory: /Users/roopalisingh/DPSI-LFR/.agents/worker_m1
 
-/goal
+Task Objective:
+Generate 4 comprehensive technical blueprint markdown files under `/Users/roopalisingh/DPSI-LFR/Self_Test_Diagnostics/knowledge/`:
+1. `web_server_architecture.md`
+2. `motor_control.md`
+3. `telemetry.md`
+4. `ui_dashboard_layout.md`
 
-You are a Technical Architect Worker assigned to generate the comprehensive Technical Blueprints for the DPSI-LFR V2 Differential Drive Robot inside the AI-KOS structure.
+Hardware Details & Constraints (derived from `v2_esp32_firmware/Config.h`):
+- Microcontroller: ESP32-S3 setup as standalone SoftAP (e.g., SSID: "ESP32-S3-Diagnostics", open or WPA2).
+- Motor Driver: L298N controlling Left Motor (ENA: GPIO 11, IN1: GPIO 12, IN2: GPIO 13) and Right Motor (ENB: GPIO 47, IN3: GPIO 14, IN4: GPIO 21). LEDC PWM frequency 20000 Hz, 8-bit resolution (0-255).
+- IR Sensor Array: 10x TCRT5000 sensors on GPIOs 1, 2, 4, 5, 6, 7, 15, 16, 17, 18 (Far Left to Far Right).
 
-IMPORTANT: Do NOT write any C++ (.cpp, .hpp, .ino) or Python (.py) code files anywhere! Your job is to create detailed markdown documentation files containing hardware pinouts, FreeRTOS task architecture, vision processing algorithms, communication protocols, and file structure designs.
+Requirements for each file:
+1. `web_server_architecture.md`:
+   - Detailed specification for ESP32-S3 SoftAP network configuration.
+   - Asynchronous web server design using ESPAsyncWebServer and AsyncWebSocket (or SSE).
+   - High-speed bi-directional communication channels (<20ms motor control latency, 20Hz telemetry stream).
+   - Non-blocking FreeRTOS architecture, event loop handling, and memory/buffer management.
+2. `motor_control.md`:
+   - Exact pin mappings and LEDC PWM channel setup (LEDC_CHANNEL_LEFT = 0, LEDC_CHANNEL_RIGHT = 1).
+   - Truth table for directional states (FORWARD, REVERSE, PIVOT_LEFT, PIVOT_RIGHT, HARD_STOP).
+   - PWM speed regulation (base speed 150, max 255).
+   - Motor safety watchdog logic (auto-stop motors if no WebSocket control packet is received within 500ms).
+3. `telemetry.md`:
+   - Sampling scheme for 10x TCRT5000 IR digital inputs.
+   - Raw 10-bit integer bitmask construction (`(ir1 << 0) | (ir2 << 1) ...`) and boolean array conversion.
+   - JSON payload format for WebSocket broadcasting (`{"type":"telemetry", "bitmask":768, "sensors":[0,0,1,1,0,0,0,0,0,0]}`).
+   - Telemetry loop scheduling (20Hz / 50ms period) and minimal serialization overhead.
+4. `ui_dashboard_layout.md`:
+   - Responsive web dashboard design intended to be stored in PROGMEM flash string.
+   - Visual wireframes and UI components (10-sensor visual LED status bar, touch/click D-Pad motor control buttons, speed control slider, latency/connection monitoring badge).
+   - Frontend JavaScript WebSocket client logic for real-time UI rendering and event handling.
 
-Hardware & System Specifications to incorporate (LOCKED IN):
-1. Microcontroller: ESP32-S3 running C++ with FreeRTOS.
-   - Core 0 pinned task: MPU6050 IMU polling via I2C and continuous Z-axis gyro integration for exact yaw angle tracking.
-   - Core 1 main task: 10x TCRT5000 IR sensor array digital sampling, 100Hz PID line-following control loop, L298N motor PWM generation, 0.96" SSD1306 I2C OLED local display telemetry, USB Serial packet parser.
-2. Primary Brain: Raspberry Pi 4B running Python 3 with OpenCV.
-   - Camera setup: Raspberry Pi Camera angled 20 degrees down forward. Requires inverse perspective transform (perspective warp matrix) to rectify image plane.
-   - Vision algorithms: HSV threshold filtering for Green Dot detection, contour analysis to determine dot position relative to main black line (left green dot = left turn at intersection, right green dot = right turn, double green dot = U-turn).
-   - High-level state machine: Line following mode, Intersection decision mode, Obstacle avoidance mode, Rescue zone navigation mode.
-3. Sensors & Actuators:
-   - 10x TCRT5000 digital IR sensors arranged in a single wide front array.
-   - L298N motor driver controlling 2x 12V 600RPM DC motors in differential drive configuration (Track width 140mm, Drive axle to rear caster 180mm).
-   - 0.96-inch I2C OLED display (SSD1306) on ESP32 for debugging (no physical buttons).
-4. Communication Bridge:
-   - USB Serial (`/dev/ttyUSB0`) operating at 115200 baud between Raspberry Pi 4B and ESP32-S3.
-
-Tasks to Complete:
-Create the following detailed markdown files with comprehensive architectural diagrams (ASCII or Mermaid), specifications, tables, and complete design logic:
-
-1. `AI-KOS/knowledge/04 Architecture/Hardware_Pinout_and_Specs.md`:
-   - Full ESP32-S3 pin assignment table for all 10 IR digital inputs, L298N pins (ENA, ENB, IN1, IN2, IN3, IN4), I2C bus (SDA, SCL) shared by OLED and MPU6050, and USB Serial.
-   - Power distribution diagram and notes (12V battery to L298N motor power, LM2596 buck converter tuned to 5.1V for Pi 4B & ESP32 logic).
-   - Chassis physical dimensions and differential kinematics equations.
-
-2. `AI-KOS/knowledge/04 Architecture/ESP32_FreeRTOS_Architecture.md`:
-   - FreeRTOS dual-core task design, task priorities, stack sizes, and inter-task communication (semaphores, queues/mutexes for sharing gyro yaw and motor speed targets).
-   - Detailed PID line-following algorithm specification across 10 sensors (sensor weighted positioning, error calculation, KP/KI/KD tuning approach).
-   - Precision 90-degree IMU turn control loop using MPU6050 feedback on Core 0.
-   - OLED telemetry UI layout specification.
-
-3. `AI-KOS/knowledge/04 Architecture/RaspberryPi_Vision_and_Navigation.md`:
-   - OpenCV processing pipeline steps (capture -> perspective warp -> color conversion -> HSV thresholding for green dots -> contour detection -> spatial decision logic).
-   - Mathematical formula / transformation matrix logic for 20-degree camera tilt rectification.
-   - Master state machine transition diagram and state descriptions.
-
-4. `AI-KOS/knowledge/04 Architecture/Serial_Communication_Protocol.md`:
-   - Complete packet framing format (Header, Opcode, Payload Length, Payload Bytes, Checksum/CRC).
-   - Opcodes table (e.g., SET_MOTOR_SPEEDS, EXECUTE_TURN_90, REPORT_SENSOR_TELEMETRY, EMERGENCY_STOP).
-   - Handshake, heartbeat, and error recovery sequences.
-
-5. `AI-KOS/knowledge/06 Development/File_Structure_and_Component_Design.md`:
-   - Architectural layout of every file to be generated by Claude Code in `v2_esp32_firmware/` and `v2_pi_core/`.
-   - Detailed component contracts: class names, function signatures, data types, and responsibilities for each file.
-
-6. Update `AI-KOS/shared-context/CurrentTask.md`:
-   - Update `CurrentTask.md` to provide a complete, updated synthesis of the technical blueprints and exact hardware/firmware configuration.
-
-Maintain your working directory in `.agents/worker_m1/`. Create your `progress.md` and deliver a detailed handoff when finished. Remember: ABSOLUTELY NO .cpp, .ino, or .py source code files! Only markdown blueprint files.
+STRICT CONSTRAINT:
+Do NOT create any `.ino`, `.cpp`, `.h`, or `.py` code files. ONLY generate the 4 `.md` files under `/Users/roopalisingh/DPSI-LFR/Self_Test_Diagnostics/knowledge/`. Write thorough, production-grade technical markdown documentation.

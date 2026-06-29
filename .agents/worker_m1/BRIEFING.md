@@ -1,56 +1,51 @@
-# BRIEFING — 2026-06-29T13:40:00Z
+# BRIEFING — 2026-06-29T08:55:00Z
 
 ## Mission
-Generate comprehensive Technical Blueprints for the DPSI-LFR V2 Differential Drive Robot inside the AI-KOS structure. Absolutely NO C++ or Python code files.
+Generate 4 production-grade technical blueprint markdown documents for Self-Test Diagnostics under Self_Test_Diagnostics/knowledge/.
 
 ## 🔒 My Identity
-- Archetype: technical_architect_worker
-- Roles: implementer, qa, specialist
-- Working directory: /Users/roopalisingh/DPSI-LFR/.agents/worker_m1/
-- Original parent: f5a9117f-9961-4e55-a00e-25b6dfd8caac
-- Milestone: V2 Technical Architecture Documentation
+- Archetype: Specialist Worker
+- Roles: specialist, implementer, qa
+- Working directory: /Users/roopalisingh/DPSI-LFR/.agents/worker_m1
+- Original parent: 6a380413-3fdc-4e04-be03-05e3bc1a9ead
+- Milestone: Self-Test Diagnostics Documentation
 
 ## 🔒 Key Constraints
-- DO NOT write any C++ (.cpp, .hpp, .ino) or Python (.py) code files anywhere.
-- Only create detailed markdown documentation files containing hardware pinouts, FreeRTOS task architecture, vision processing algorithms, communication protocols, and file structure designs.
-- All implementations and designs must be genuine and maintain real technical accuracy.
+- STRICT CONSTRAINT: Do NOT create any `.ino`, `.cpp`, `.h`, or `.py` code files. ONLY generate the 4 `.md` files under `/Users/roopalisingh/DPSI-LFR/Self_Test_Diagnostics/knowledge/`. Write thorough, production-grade technical markdown documentation.
+- Use exact hardware mappings and constants from `v2_esp32_firmware/Config.h`.
 
 ## Current Parent
-- Conversation ID: f5a9117f-9961-4e55-a00e-25b6dfd8caac
-- Updated: 2026-06-29T13:40:00Z
+- Conversation ID: 6a380413-3fdc-4e04-be03-05e3bc1a9ead
+- Updated: 2026-06-29T08:55:00Z
 
 ## Task Summary
-- **What to build**: 5 detailed markdown blueprint files in `AI-KOS/knowledge/04 Architecture/`, `06 Development/` and update `AI-KOS/shared-context/CurrentTask.md`.
-- **Success criteria**: Comprehensive markdown specs with diagrams, tables, formulas, state machines, pinouts, FreeRTOS dual-core task design, OpenCV pipelines, packet framing, and component contracts.
-- **Interface contracts**: AI-KOS architecture guidelines and user specification list.
-- **Code layout**: Markdown files under `AI-KOS/`.
-
-## Key Decisions Made
-- Architecture split: ESP32-S3 handling hard real-time (IMU on Core 0, PID line-following on Core 1) and Pi 4B handling high-level vision and state machine.
-
-## Artifact Index
-- `AI-KOS/knowledge/04 Architecture/Hardware_Pinout_and_Specs.md` — Hardware Pinouts & Specs
-- `AI-KOS/knowledge/04 Architecture/ESP32_FreeRTOS_Architecture.md` — FreeRTOS Architecture & PID
-- `AI-KOS/knowledge/04 Architecture/RaspberryPi_Vision_and_Navigation.md` — Vision Pipeline & Navigation
-- `AI-KOS/knowledge/04 Architecture/Serial_Communication_Protocol.md` — Serial Protocol Spec
-- `AI-KOS/knowledge/06 Development/File_Structure_and_Component_Design.md` — File Structure & Contracts
-- `AI-KOS/shared-context/CurrentTask.md` — Synthesis update
+- **What to build**: 4 comprehensive markdown technical blueprints (`web_server_architecture.md`, `motor_control.md`, `telemetry.md`, `ui_dashboard_layout.md`).
+- **Success criteria**: Complete, production-grade architecture documents detailing SoftAP, AsyncWebSocket, LEDC PWM motor control, IR bitmask telemetry, and PROGMEM HTML/JS dashboard. All 4 files successfully written under `/Users/roopalisingh/DPSI-LFR/Self_Test_Diagnostics/knowledge/`.
+- **Interface contracts**: `v2_esp32_firmware/Config.h` pinout & constants.
 
 ## Change Tracker
 - **Files modified**:
-  - `AI-KOS/knowledge/04 Architecture/Hardware_Pinout_and_Specs.md` (Created)
-  - `AI-KOS/knowledge/04 Architecture/ESP32_FreeRTOS_Architecture.md` (Created)
-  - `AI-KOS/knowledge/04 Architecture/RaspberryPi_Vision_and_Navigation.md` (Created)
-  - `AI-KOS/knowledge/04 Architecture/Serial_Communication_Protocol.md` (Created)
-  - `AI-KOS/knowledge/06 Development/File_Structure_and_Component_Design.md` (Created)
-  - `AI-KOS/shared-context/CurrentTask.md` (Updated)
-- **Build status**: Complete (Documentation tasks verified)
+  - `Self_Test_Diagnostics/knowledge/web_server_architecture.md`: SoftAP & AsyncWebSocket server blueprint.
+  - `Self_Test_Diagnostics/knowledge/motor_control.md`: L298N motor control, LEDC PWM setup & safety watchdog.
+  - `Self_Test_Diagnostics/knowledge/telemetry.md`: TCRT5000 10-sensor array sampling, bitmask & JSON telemetry format.
+  - `Self_Test_Diagnostics/knowledge/ui_dashboard_layout.md`: PROGMEM dashboard layout, UI components & JS client logic.
+- **Build status**: N/A (Documentation task)
 - **Pending issues**: None
 
 ## Quality Status
-- **Build/test result**: N/A (Documentation generation)
-- **Lint status**: N/A
+- **Build/test result**: All 4 files generated and verified in target directory.
+- **Lint status**: Clean
 - **Tests added/modified**: N/A
 
 ## Loaded Skills
-- None loaded.
+- None
+
+## Key Decisions Made
+- Architecture alignment: Strictly derived specifications and pinouts from ESP32-S3 hardware specifications and Config.h definitions.
+
+## Artifact Index
+- `/Users/roopalisingh/DPSI-LFR/Self_Test_Diagnostics/knowledge/web_server_architecture.md`
+- `/Users/roopalisingh/DPSI-LFR/Self_Test_Diagnostics/knowledge/motor_control.md`
+- `/Users/roopalisingh/DPSI-LFR/Self_Test_Diagnostics/knowledge/telemetry.md`
+- `/Users/roopalisingh/DPSI-LFR/Self_Test_Diagnostics/knowledge/ui_dashboard_layout.md`
+- `/Users/roopalisingh/DPSI-LFR/.agents/worker_m1/handoff.md`

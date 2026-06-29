@@ -1,26 +1,25 @@
-## 2026-06-29T08:11:23Z
-<USER_REQUEST>
-/goal
+## 2026-06-29T14:23:46Z
 
-You are a Prompt Engineering Worker assigned to create the finalized Master Prompt for Claude Code inside `AI-KOS/prompts/Claude_Code_Prompt.md` for the DPSI-LFR V2 Differential Drive Robot.
+Role: Specialist Worker for Claude Code Master Prompt Creation
+Working Directory: /Users/roopalisingh/DPSI-LFR/.agents/worker_m2
 
-IMPORTANT: Do NOT write any C++ (.cpp, .hpp, .ino) or Python (.py) code files! Your job is strictly to author the extensive markdown master prompt document `AI-KOS/prompts/Claude_Code_Prompt.md`.
+Task Objective:
+Draft an extensive, finalized, ready-to-copy master prompt inside `/Users/roopalisingh/DPSI-LFR/Self_Test_Diagnostics/prompts/Claude_Diagnostics_Prompt.md`.
 
-Context & Technical Specs to Synthesize into the Master Prompt:
-Read the newly authored blueprint files in `AI-KOS/knowledge/04 Architecture/` and `AI-KOS/knowledge/06 Development/` and `AI-KOS/shared-context/CurrentTask.md` to ensure complete consistency.
-The prompt you construct will be given directly to Claude Code to generate the entire functional codebase for the V2 robot.
+Context & Technical Hardware References (from `v2_esp32_firmware/Config.h`):
+- Microcontroller: ESP32-S3.
+- Goal of Prompt: Instruct Claude Code (an autonomous AI coding assistant) to generate complete, production-grade diagnostic firmware for ESP32-S3 that temporarily replaces the main FreeRTOS line-following code for physical hardware testing.
+- Features required in firmware to be built by Claude Code:
+  1. Wi-Fi Access Point (SSID: `ESP32-Diagnostics-AP`, IP: `192.168.4.1`).
+  2. Async Web Server serving an embedded single-page HTML/CSS/JS dashboard.
+  3. WebSocket server handling low-latency motor control commands and real-time telemetry streaming.
+  4. L298N Motor control using ESP32-S3 LEDC PWM (Left: ENA 11, IN1 12, IN2 13; Right: ENB 47, IN3 14, IN4 21; 20kHz, 8-bit). Include 500ms safety watchdog auto-stop.
+  5. 10x IR Sensor Array reading on GPIOs 1, 2, 4, 5, 6, 7, 15, 16, 17, 18, streaming bitmask at 20Hz.
 
-Requirements for `AI-KOS/prompts/Claude_Code_Prompt.md`:
-1. System Role & Context: Instruct Claude Code that it is the Lead Firmware & Robotics Engineer implementing the code for DPSI-LFR V2.
-2. Comprehensive Architecture Summary: Summarize the locked-in dual-brain hardware setup (Raspberry Pi 4B + ESP32-S3), exact GPIO pin assignments, L298N motor driver, 10x TCRT5000 IR array, MPU6050 IMU on FreeRTOS Core 0, SSD1306 OLED, 20° camera tilt perspective warp, and `/dev/ttyUSB0` serial protocol.
-3. Target Directory & File Tree Instructions: Direct Claude Code to write code into two distinct target directories:
-   - `v2_esp32_firmware/`: `v2_esp32_firmware.ino`, `Config.h`, `IMU_Task.h`, `PID_Control.h`, `MotorDriver.h`, `DisplayUI.h`, `SerialComms.h`.
-   - `v2_pi_core/`: `main.py`, `config.py`, `comms/esp_bridge.py`, `vision/camera_warp.py`, `vision/green_dot.py`, `navigation/state_machine.py`.
-4. Exact Implementation Guidelines for Each File:
-   - For C++ files: provide step-by-step instructions for FreeRTOS task pinning (`xTaskCreatePinnedToCore`), task synchronization with mutexes/semaphores, discrete PID math over 10 digital sensors, zero-radius 90° pivot turns using gyro integration, L298N PWM motor channel mapping, OLED buffer rendering, and packet decoding/encoding.
-   - For Python files: provide step-by-step instructions for OpenCV homography matrix setup (20° tilt rectification), HSV color thresholding & contour filtering for green dots, spatial decision logic relative to the main black line, PySerial binary packet frame handling with CRC verification, and multi-state FSM transitions.
-5. Strict Formatting, Coding Standards & Testing Guidelines: Include rules for clean header guards, modular design, non-blocking loops, robust error recovery, and clear logging.
-6. Execution Step-by-Step Instructions for Claude Code: Present the prompt in a structured, copy-paste ready format with clear execution phases for Claude Code.
+Prompt Design Requirements for `Claude_Diagnostics_Prompt.md`:
+- Must be structured clearly with markdown headers, code blocks, pin tables, and operational requirements.
+- Must provide exact step-by-step instructions for Claude Code on project structure (e.g., PlatformIO / Arduino IDE setup), library dependencies (`ESPAsyncWebServer`, `AsyncTCP`, `ArduinoJson`), C++ implementation details, embedded HTML/JS string literal creation, and verification steps.
+- Must explicitly instruct Claude Code on coding standards, zero-delay execution, safety watchdogs, and clear logging via Serial.
 
-Maintain your working directory in `.agents/worker_m2/`. Write your `progress.md` and deliver a detailed handoff report when completed. Remember: DO NOT write any C++ or Python code files! Deliver only `AI-KOS/prompts/Claude_Code_Prompt.md`.
-</USER_REQUEST>
+STRICT CONSTRAINT:
+Do NOT create any `.ino`, `.cpp`, `.h`, or `.py` code files. ONLY create `/Users/roopalisingh/DPSI-LFR/Self_Test_Diagnostics/prompts/Claude_Diagnostics_Prompt.md`.
