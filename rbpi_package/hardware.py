@@ -44,7 +44,8 @@ class RobotHardware:
         self.last_imu_time = time.time()
         self.is_calibrating = False
         self.calibration_progress = 0.0
-        self.calibration_duration = 60.0 # 60-second calibration as requested
+        self.calibration_duration = 20.0 # Reduced to 20 seconds
+        self.gyro_scale = 1.40           # Increased gyro sensitivity scaling by 40%
         
         if has_mpu:
             try:
@@ -270,7 +271,7 @@ class RobotHardware:
                     
                     # Apply small deadzone (e.g. 0.15 deg/s) to reduce drift when stationary
                     if abs(gyro_z) > 0.15:
-                        self.yaw += gyro_z * dt
+                        self.yaw += gyro_z * dt * self.gyro_scale
                         
                     # Normalize yaw to -180 to +180 range
                     self.yaw = (self.yaw + 180) % 360 - 180

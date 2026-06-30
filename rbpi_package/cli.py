@@ -167,6 +167,9 @@ def run_tui(stdscr):
     curses.init_pair(5, curses.COLOR_CYAN, curses.COLOR_BLACK)       # Cyan fallback
     curses.init_pair(6, curses.COLOR_WHITE, curses.COLOR_BLACK)      # White standard text
     
+    # Force the window background to be solid black
+    stdscr.bkgd(' ', curses.color_pair(6))
+    
     # Run self-updater on startup
     check_for_updates(stdscr)
     
