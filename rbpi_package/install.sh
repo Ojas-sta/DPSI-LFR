@@ -9,7 +9,7 @@ set -e
 # Update and install system dependencies
 echo "=> Installing system dependencies..."
 sudo apt-get update -y
-sudo apt-get install -y git python3-pip python3-venv python3-opencv libatlas-base-dev
+sudo apt-get install -y git python3-pip python3-venv python3-opencv libopenblas-dev
 
 # Clone or Update Repo
 REPO_DIR="$HOME/DPSI-LFR"
