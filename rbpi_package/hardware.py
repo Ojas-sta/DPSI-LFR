@@ -42,22 +42,15 @@ class RobotHardware:
         self.imu_sensor = None
         self.gyro_bias_z = 0.0
         self.last_imu_time = time.time()
+        self.is_calibrating = False
+        self.calibration_progress = 0.0
+        self.calibration_duration = 60.0 # 60-second calibration as requested
         
         if has_mpu:
             try:
                 self.imu_sensor = mpu6050(0x68)
-                self.telemetry_log.append("[IMU] MPU6050 found! Calibrating...")
-                # Calibrate by averaging 100 samples
-                bias_sum = 0.0
-                for _ in range(100):
-                    try:
-                        gyro_data = self.imu_sensor.get_gyro_data()
-                        bias_sum += gyro_data['z']
-                    except Exception:
-                        pass
-                    time.sleep(0.005)
-                self.gyro_bias_z = bias_sum / 100.0
-                self.telemetry_log.append(f"[IMU] Calibrated. Bias: {self.gyro_bias_z:.4f}")
+                self.is_calibrating = True
+                self.telemetry_log.append("[IMU] MPU6050 found. Starting 60s calibration...")
             except Exception as e:
                 self.telemetry_log.append(f"[IMU] Init Error: {e}")
                 self.imu_sensor = None
@@ -214,13 +207,59 @@ class RobotHardware:
             except Exception as e:
                 print(f"[Hardware] Failed to connect to {port_name}: {e}. Running in Mock mode.")
 
+    def reset_yaw(self):
+        """Resets the integrated yaw angle to zero and re-calibrates bias quickly (1 second)."""
+        self.yaw = 0.0
+        if self.imu_sensor:
+            try:
+                bias_sum = 0.0
+                successful_samples = 0
+                for _ in range(50):
+                    try:
+                        gyro_data = self.imu_sensor.get_gyro_data()
+                        bias_sum += gyro_data['z']
+                        successful_samples += 1
+                    except Exception:
+                        pass
+                    time.sleep(0.02)
+                if successful_samples > 0:
+                    self.gyro_bias_z = bias_sum / successful_samples
+            except Exception:
+                pass
+
     def run_imu_loop(self):
         """Dedicated background thread for high-frequency Gyro integration."""
         self.last_imu_time = time.time()
         error_throttle_time = 0.0
+        
+        # 1. Handle Calibration over 60 seconds
+        if self.imu_sensor and self.is_calibrating:
+            bias_sum = 0.0
+            successful_samples = 0
+            samples_needed = int(self.calibration_duration * 50) # 50Hz = 3000 samples
+            
+            for i in range(samples_needed):
+                if self.stop_thread_event.is_set():
+                    return
+                try:
+                    gyro_data = self.imu_sensor.get_gyro_data()
+                    bias_sum += gyro_data['z']
+                    successful_samples += 1
+                except Exception:
+                    pass
+                self.calibration_progress = (i + 1) / samples_needed
+                time.sleep(0.02)
+                
+            if successful_samples > 0:
+                self.gyro_bias_z = bias_sum / successful_samples
+            self.is_calibrating = False
+            with self.telemetry_lock:
+                self.telemetry_log.append(f"[IMU] Calibration complete. Bias: {self.gyro_bias_z:.4f}")
+                
+        # 2. Main Yaw Integration loop
         while not self.stop_thread_event.is_set():
             current_time = time.time()
-            if self.imu_sensor:
+            if self.imu_sensor and not self.is_calibrating:
                 try:
                     gyro_data = self.imu_sensor.get_gyro_data()
                     dt = current_time - self.last_imu_time
@@ -229,8 +268,8 @@ class RobotHardware:
                     # Subtract calibrated bias
                     gyro_z = gyro_data['z'] - self.gyro_bias_z
                     
-                    # Apply small deadzone (e.g. 0.25 deg/s) to reduce drift when stationary
-                    if abs(gyro_z) > 0.25:
+                    # Apply small deadzone (e.g. 0.15 deg/s) to reduce drift when stationary
+                    if abs(gyro_z) > 0.15:
                         self.yaw += gyro_z * dt
                         
                     # Normalize yaw to -180 to +180 range

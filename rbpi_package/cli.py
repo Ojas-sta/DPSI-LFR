@@ -201,6 +201,29 @@ def run_tui(stdscr):
         # Ensure screen buffer is cleared
         stdscr.clear()
         
+        # Check for active calibration progress screen
+        if robot.is_calibrating:
+            box_h = 8
+            box_w = 60
+            box_y = max(0, (max_y - box_h) // 2)
+            box_x = max(0, (max_x - box_w) // 2)
+            
+            draw_box(stdscr, box_y, box_x, box_h, box_w, "IMU GYROSCOPE CALIBRATION", curses.color_pair(1))
+            
+            stdscr.addstr(box_y + 2, box_x + 4, "Calibrating MPU6050 sensor. Keep robot still!", curses.color_pair(6) | curses.A_BOLD)
+            
+            progress = robot.calibration_progress
+            bar_len = 48
+            filled_len = int(progress * bar_len)
+            bar = "█" * filled_len + "░" * (bar_len - filled_len)
+            
+            stdscr.addstr(box_y + 4, box_x + 5, f"[{bar}] {progress*100:3.0f}%", curses.color_pair(2) | curses.A_BOLD)
+            stdscr.addstr(box_y + 5, box_x + 5, f"Time remaining: {robot.calibration_duration * (1.0 - progress):2.0f}s", curses.color_pair(6))
+            
+            stdscr.refresh()
+            time.sleep(0.1)
+            continue
+        
         # 1. RENDER HEADER BANNERS
         y_ptr = 1
         # If terminal is big enough, draw full centered ascii-art.txt
