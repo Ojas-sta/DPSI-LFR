@@ -45,7 +45,7 @@ class RobotHardware:
         self.is_calibrating = False
         self.calibration_progress = 0.0
         self.calibration_duration = 20.0 # Reduced to 20 seconds
-        self.gyro_scale = 1.40           # Increased gyro sensitivity scaling by 40%
+        self.gyro_scale = 3.0            # Increased gyro sensitivity scaling to 3x
         
         if has_mpu:
             try:
