@@ -37,20 +37,6 @@ void handleSerialInput() {
                             feedMotorWatchdog();
                         }
                     }
-                } else if (strncmp(rx_buffer, "A:", 2) == 0) {
-                    int arm_val = 0;
-                    if (sscanf(rx_buffer + 2, "%d", &arm_val) == 1) {
-                        g_armed = (arm_val != 0);
-                        if (!g_armed) {
-                            setLeftMotor(0);
-                            setRightMotor(0);
-                        }
-                    }
-                } else if (strncmp(rx_buffer, "C:", 2) == 0) {
-                    int mode_val = 0;
-                    if (sscanf(rx_buffer + 2, "%d", &mode_val) == 1) {
-                        g_auto_mode = (mode_val != 0);
-                    }
                 }
                 rx_index = 0;
             }

@@ -28,8 +28,6 @@ class RobotHardware:
         except ImportError:
             print("[Hardware] pyserial module not found. Running in mock serial mode.")
 
-        atexit.register(self.cleanup)
-
     def set_speeds(self, left_speed, right_speed):
         """
         Sets the speed for left and right motors.
@@ -48,30 +46,6 @@ class RobotHardware:
                 self.serial_port.flush()
             except Exception as e:
                 # Catch serial.SerialException or other write errors gracefully
-                print(f"[Hardware] Serial write error: {e}")
-
-    def send_arm(self, state: bool):
-        """Sends Arm/Disarm command to ESP8266."""
-        val = 1 if state else 0
-        cmd = f"A:{val}\n"
-        print(f"[Hardware] Sending Arm Command: {cmd.strip()}")
-        if self.serial_port and self.serial_port.is_open:
-            try:
-                self.serial_port.write(cmd.encode('utf-8'))
-                self.serial_port.flush()
-            except Exception as e:
-                print(f"[Hardware] Serial write error: {e}")
-
-    def send_mode(self, auto: bool):
-        """Sends Auto/Manual mode command to ESP8266."""
-        val = 1 if auto else 0
-        cmd = f"C:{val}\n"
-        print(f"[Hardware] Sending Mode Command: {cmd.strip()}")
-        if self.serial_port and self.serial_port.is_open:
-            try:
-                self.serial_port.write(cmd.encode('utf-8'))
-                self.serial_port.flush()
-            except Exception as e:
                 print(f"[Hardware] Serial write error: {e}")
 
     def stop(self):

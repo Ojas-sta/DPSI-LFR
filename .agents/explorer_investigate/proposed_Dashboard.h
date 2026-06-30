@@ -283,8 +283,6 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
         document.addEventListener('touchmove', jMove, {passive: false});
         document.addEventListener('touchend', jEnd);
 
-        updateArmUI();
-        updateModeUI();
         connect();
     </script>
 </body>
