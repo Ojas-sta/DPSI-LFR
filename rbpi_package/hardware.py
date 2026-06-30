@@ -46,7 +46,7 @@ class RobotHardware:
         if has_mpu:
             try:
                 self.imu_sensor = mpu6050(0x68)
-                print("[IMU] Calibrating gyro bias (keep robot still)...")
+                self.telemetry_log.append("[IMU] MPU6050 found! Calibrating...")
                 # Calibrate by averaging 100 samples
                 bias_sum = 0.0
                 for _ in range(100):
@@ -57,9 +57,9 @@ class RobotHardware:
                         pass
                     time.sleep(0.005)
                 self.gyro_bias_z = bias_sum / 100.0
-                print(f"[IMU] Gyro calibration complete. Bias Z: {self.gyro_bias_z:.4f}")
+                self.telemetry_log.append(f"[IMU] Calibrated. Bias: {self.gyro_bias_z:.4f}")
             except Exception as e:
-                print(f"[IMU] Failed to initialize MPU6050: {e}")
+                self.telemetry_log.append(f"[IMU] Init Error: {e}")
                 self.imu_sensor = None
 
         
@@ -102,45 +102,17 @@ class RobotHardware:
         if not self.is_test_mock:
             self.reader_thread = threading.Thread(target=self.run_serial_reader, daemon=True)
             self.reader_thread.start()
+            
+            # Spin up a dedicated thread for IMU integration
+            self.imu_thread = threading.Thread(target=self.run_imu_loop, daemon=True)
+            self.imu_thread.start()
 
     def run_serial_reader(self):
-        """Background thread loop to send ping heartbeats, read incoming serial lines, and integrate IMU Yaw."""
+        """Background thread loop to send ping heartbeats and read incoming serial lines safely."""
         mock_telemetry_timer = 0.0
         last_motor_send_time = 0.0
-        self.last_imu_time = time.time()
-        
         while not self.stop_thread_event.is_set():
             current_time = time.time()
-            
-            # Integrate IMU Yaw
-            if self.imu_sensor:
-                try:
-                    gyro_data = self.imu_sensor.get_gyro_data()
-                    dt = current_time - self.last_imu_time
-                    self.last_imu_time = current_time
-                    
-                    # Subtract calibrated bias
-                    gyro_z = gyro_data['z'] - self.gyro_bias_z
-                    
-                    # Apply small deadzone (e.g. 0.25 deg/s) to reduce drift when stationary
-                    if abs(gyro_z) > 0.25:
-                        # Gyro Z points up, counter-clockwise rotation is positive.
-                        # Yaw increases when turning Left (counter-clockwise).
-                        self.yaw += gyro_z * dt
-                        
-                    # Normalize yaw to -180 to +180 range
-                    self.yaw = (self.yaw + 180) % 360 - 180
-                except Exception:
-                    pass
-            else:
-                self.last_imu_time = current_time
-                # Simulate a slowly rotating yaw in mock mode if driving
-                if self.is_mock and (abs(self.left_speed) > 0.1 or abs(self.right_speed) > 0.1):
-                    # Compute turning factor
-                    turn_diff = self.right_speed - self.left_speed
-                    self.yaw += turn_diff * 40.0 * (current_time - self.last_imu_time)
-                    self.yaw = (self.yaw + 180) % 360 - 180
-
             
             # 1. Send continuous Motor commands (M:) every 200ms to feed ESP Watchdog
             if current_time - last_motor_send_time >= 0.2:
@@ -241,6 +213,44 @@ class RobotHardware:
                     print(f"[Hardware] Successfully connected to serial port: {port_name}")
             except Exception as e:
                 print(f"[Hardware] Failed to connect to {port_name}: {e}. Running in Mock mode.")
+
+    def run_imu_loop(self):
+        """Dedicated background thread for high-frequency Gyro integration."""
+        self.last_imu_time = time.time()
+        error_throttle_time = 0.0
+        while not self.stop_thread_event.is_set():
+            current_time = time.time()
+            if self.imu_sensor:
+                try:
+                    gyro_data = self.imu_sensor.get_gyro_data()
+                    dt = current_time - self.last_imu_time
+                    self.last_imu_time = current_time
+                    
+                    # Subtract calibrated bias
+                    gyro_z = gyro_data['z'] - self.gyro_bias_z
+                    
+                    # Apply small deadzone (e.g. 0.25 deg/s) to reduce drift when stationary
+                    if abs(gyro_z) > 0.25:
+                        self.yaw += gyro_z * dt
+                        
+                    # Normalize yaw to -180 to +180 range
+                    self.yaw = (self.yaw + 180) % 360 - 180
+                except Exception as e:
+                    self.last_imu_time = current_time
+                    if current_time - error_throttle_time > 5.0:
+                        error_throttle_time = current_time
+                        with self.telemetry_lock:
+                            self.telemetry_log.append(f"[IMU] Read error: {e}")
+                            if len(self.telemetry_log) > 10:
+                                self.telemetry_log.pop(0)
+            else:
+                self.last_imu_time = current_time
+                # Simulate a slowly rotating yaw in mock mode if driving
+                if self.is_mock and (abs(self.left_speed) > 0.1 or abs(self.right_speed) > 0.1):
+                    turn_diff = self.right_speed - self.left_speed
+                    self.yaw += turn_diff * 40.0 * (current_time - self.last_imu_time)
+                    self.yaw = (self.yaw + 180) % 360 - 180
+            time.sleep(0.02) # 50Hz is perfect for integration
 
     def adjust_trim(self, amount):
         """Adjusts the drift trim bias (clamps between -0.3 and 0.3)."""
@@ -350,6 +360,8 @@ class RobotHardware:
         self.stop_thread_event.set()
         if hasattr(self, 'reader_thread') and self.reader_thread.is_alive():
             self.reader_thread.join(timeout=1.0)
+        if hasattr(self, 'imu_thread') and self.imu_thread.is_alive():
+            self.imu_thread.join(timeout=1.0)
         self.stop()
         if self.serial_port:
             try:
