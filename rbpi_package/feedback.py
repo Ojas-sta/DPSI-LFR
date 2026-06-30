@@ -2,17 +2,18 @@ import time
 import threading
 
 try:
-    from gpiozero import LED, TonalBuzzer
+    from gpiozero import LED, Buzzer
 except ImportError:
     print("Warning: gpiozero not found. Running feedback in mock mode.")
     class LED:
-        def __init__(self, pin): self.pin = pin
+        def __init__(self, pin, active_high=True): self.pin = pin
         def on(self): pass
         def off(self): pass
-    class TonalBuzzer:
-        def __init__(self, pin): self.pin = pin
-        def play(self, tone): pass
-        def stop(self): pass
+    class Buzzer:
+        def __init__(self, pin, active_high=True): self.pin = pin
+        def on(self): pass
+        def off(self): pass
+
 
 
 class FeedbackController:
@@ -24,11 +25,11 @@ class FeedbackController:
         - 1 Green LED
         - 1 Buzzer
         """
-        self.red_led = LED(red_pin)
-        self.green_led = LED(green_pin)
+        self.red_led = LED(red_pin, active_high=False)
+        self.green_led = LED(green_pin, active_high=False)
         
         try:
-            self.buzzer = TonalBuzzer(buzzer_pin)
+            self.buzzer = Buzzer(buzzer_pin, active_high=False)
             self.has_buzzer = True
         except Exception:
             self.has_buzzer = False
@@ -52,7 +53,7 @@ class FeedbackController:
             led.on()
             if buzzer_tone and self.has_buzzer:
                 try:
-                    self.buzzer.play(buzzer_tone)
+                    self.buzzer.on()
                 except Exception:
                     pass
             self._sleep(blink_on)
@@ -66,7 +67,7 @@ class FeedbackController:
         led.off()
         if self.has_buzzer:
             try:
-                self.buzzer.stop()
+                self.buzzer.off()
             except Exception:
                 pass
 
@@ -125,7 +126,7 @@ class FeedbackController:
         self.green_led.on()
         if self.has_buzzer:
             try:
-                self.buzzer.stop()
+                self.buzzer.off()
             except Exception:
                 pass
         
@@ -141,7 +142,7 @@ class FeedbackController:
         self.red_led.on()
         if self.has_buzzer:
             try:
-                self.buzzer.stop()
+                self.buzzer.off()
             except Exception:
                 pass
 
@@ -172,6 +173,6 @@ class FeedbackController:
         self.green_led.off()
         if self.has_buzzer:
             try:
-                self.buzzer.stop()
+                self.buzzer.off()
             except Exception:
                 pass

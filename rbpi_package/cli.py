@@ -404,11 +404,11 @@ def run_tui(stdscr):
                 status_msg = f"Buzzer {'Enabled' if buzzer_enabled else 'Muted'}."
                 if buzzer_enabled and feedback.has_buzzer:
                     try:
-                        feedback.buzzer.play(600)
+                        feedback.buzzer.on()
                         def stop_beep():
                             time.sleep(0.1)
                             try:
-                                feedback.buzzer.stop()
+                                feedback.buzzer.off()
                             except Exception:
                                 pass
                         threading.Thread(target=stop_beep, daemon=True).start()
@@ -417,7 +417,7 @@ def run_tui(stdscr):
                 else:
                     if feedback.has_buzzer:
                         try:
-                            feedback.buzzer.stop()
+                            feedback.buzzer.off()
                         except Exception:
                             pass
                             
