@@ -29,7 +29,7 @@ class FeedbackController:
         self.green_led = LED(green_pin, active_high=False)
         
         try:
-            self.buzzer = Buzzer(buzzer_pin, active_high=False)
+            self.buzzer = Buzzer(buzzer_pin, active_high=True)
             self.has_buzzer = True
         except Exception:
             self.has_buzzer = False
