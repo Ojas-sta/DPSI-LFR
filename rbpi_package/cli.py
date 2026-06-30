@@ -367,8 +367,8 @@ def run_tui(stdscr):
             # Mode Control
             elif c in (ord('m'), ord('M')):
                 mode = "MANUAL" if mode == "AUTO" else "AUTO"
-                robot.send_mode(mode == "AUTO")
-                status_msg = f"Switched to {mode} mode."
+                robot.set_speeds(0, 0)
+                status_msg = f"Switched to Pi {mode} mode."
                 
             # Emergency Stop
             elif c == ord(' '):
