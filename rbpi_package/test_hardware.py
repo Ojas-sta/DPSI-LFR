@@ -53,5 +53,43 @@ class TestRobotHardware(unittest.TestCase):
         hw.set_speeds(1.5, -2.3)
         mock_port.write.assert_called_with(b"M:1.0000,-1.0000\n")
 
+    @patch('builtins.print')
+    def test_switch_port(self, mock_print):
+        mock_port = MagicMock()
+        mock_port.is_open = True
+        mock_serial_mod.Serial.return_value = mock_port
+        
+        hw = RobotHardware()
+        self.assertEqual(hw.port_name, '/dev/serial0')
+        
+        hw.switch_port('/dev/ttyUSB0')
+        self.assertEqual(hw.port_name, '/dev/ttyUSB0')
+
+    @patch('builtins.print')
+    def test_send_arm(self, mock_print):
+        mock_port = MagicMock()
+        mock_port.is_open = True
+        mock_serial_mod.Serial.return_value = mock_port
+        
+        hw = RobotHardware()
+        hw.send_arm(True)
+        mock_port.write.assert_called_with(b"A:1\n")
+        
+        hw.send_arm(False)
+        mock_port.write.assert_called_with(b"A:0\n")
+
+    @patch('builtins.print')
+    def test_send_mode(self, mock_print):
+        mock_port = MagicMock()
+        mock_port.is_open = True
+        mock_serial_mod.Serial.return_value = mock_port
+        
+        hw = RobotHardware()
+        hw.send_mode(True)
+        mock_port.write.assert_called_with(b"C:1\n")
+        
+        hw.send_mode(False)
+        mock_port.write.assert_called_with(b"C:0\n")
+
 if __name__ == '__main__':
     unittest.main()

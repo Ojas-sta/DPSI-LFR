@@ -1,48 +1,43 @@
-# Project: Line Follower Robot Two-Node Architecture Migration
+# Project: DPSI-LFR TUI & ESP8266 Overhaul
 
 ## Architecture
-The system consists of two primary processing nodes:
-1. **Raspberry Pi Node (Vision, Stuck Detection & Competition Feedback)**:
-   - Location: `/Users/roopalisingh/Downloads/TemuFollower`
-   - Core files: `main.py`, `hardware.py`, `vision.py`, `feedback.py`
-   - Role: Captures video, tracks black lines, detects red/green markers, queries MPU6050 IMU for stuck detection, coordinates buzzer/LED feedback, and transmits motor commands via serial UART.
-2. **ESP8266 Node (Motor Actuation & Web Diagnostics Dashboard)**:
-   - Location: `/Users/roopalisingh/DPSI-LFR/Self_Test_Diagnostics`
-   - Core files: `src/main.cpp`, `src/Motors.h`/`src/Motors.cpp`, `src/WebDiagnostics.h`/`src/WebDiagnostics.cpp`, `src/Dashboard.h`
-   - Role: Runs a WebSocket-based diagnostics server and safety web dashboard. Listens on hardware Serial UART for motor commands, parses command floats, applies safety gates (Arm/Disarm, Auto/Manual), and drives the L298N motor driver via 8-bit PWM.
-
-## Code Layout
-- **Raspberry Pi**:
-  - `hardware.py` - Hardware abstraction handling Serial UART command transmission.
-  - `main.py` - Main loop coordinating vision processing, control, and feedback.
-  - `vision.py` - Image processing to track lines and detect red/green indicators.
-  - `feedback.py` - Orchestrates LED/buzzer animations.
-- **ESP8266**:
-  - `src/main.cpp` - Entry point, WiFi AP setup, WebSocket telemetry loop, and serial reading task.
-  - `src/Motors.h`/`src/Motors.cpp` - Motor actuation and safety enforcement (watchdog, arming checks).
-  - `src/WebDiagnostics.h`/`src/WebDiagnostics.cpp` - Server routes, WebSocket handlers, and safety override transitions.
-  - `src/Dashboard.h` - HTML/JS/CSS source code for the Web Dashboard interface.
+- **Two-node Architecture**: Raspberry Pi 4B (vision/metrics/TUI CLI) and ESP8266 (motor actuation and web diagnostics).
+- **Communication Link**: Serial over UART (`/dev/serial0` or `/dev/ttyUSB0`) at 115,200 baud.
+- **Message Protocols**:
+  - Motor Commands: `M:<left_speed>,<right_speed>\n`
+  - Arm Command: `A:<0 or 1>\n`
+  - Mode Command: `C:<0 or 1>\n`
+  - Ping Command: `P\n`
+  - Pong Command: `P_ACK\n`
+- **TUI Component (`cli.py`)**:
+  - Curses-based interface with blue (`curses.COLOR_BLUE`) and purple/magenta (`curses.COLOR_MAGENTA`) styling.
+  - Centered ASCII art display at the top from `ascii-art.txt`.
+  - Connection status badge showing `[ CONNECTED ]` (green) or `[ DISCONNECTED ]` (red) based on 1s ping-pong protocol.
+  - 3-wheel differential chassis telemetry (rear left, rear right, front caster) with color-coded wheel speeds (green for positive, red for negative).
+  - IMU heading (Z-axis gyro integration) and speed limit adjustments using keys `[` and `]`.
+  - Bordered sub-window for the live Serial monitor panel showing the last 10 lines of incoming data.
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
-|---|---|---|---|---|
-| 1 | R1: Dual-UART Pi Bridge | Refactor RPi's `hardware.py` to send clamped motor commands as `M:L,R\n` over serial `/dev/serial0` and fallback `/dev/ttyUSB0`. | None | PLANNED |
-| 2 | R2: ESP8266 UART Parsing | Modify ESP8266 `main.cpp`, `Motors.h`, and `Motors.cpp` to listen to serial, scale floats by 255 to PWM, and command motors. | M1 | PLANNED |
-| 3 | R3: Web Dashboard Safety & Override | Upgrade `Dashboard.h` and `WebDiagnostics.cpp` with Arm/Disarm and Auto/Manual safety toggles. Force motor outputs to 0 if disarmed. | M2 | PLANNED |
-| 4 | R4: Feedback & IMU Integration | Integrate RPi `main.py`, `vision.py`, and `feedback.py` with green contour detection, synchronized tone buzzer animations, and stuck detection. | M1 | PLANNED |
-| 5 | E2E System Verification | Compile ESP8266 firmware, verify syntactical correctness of Pi python files, and execute mock-based verification tests. | M3, M4 | PLANNED |
+|---|------|-------|-------------|--------|
+| M1 | ESP8266 Ping-Pong Command | Add `P\n` parsing and `P_ACK\n` response to ESP8266 firmware | None | DONE (c064b9d0-954e-4ef2-be28-57798a6c2fbf) |
+| M2 | Curses TUI Layout & Theme | Implement blue/magenta curses layout, render ascii-art.txt centered | None | DONE (0434a275-cb55-47fe-b85f-cc0f90988208) |
+| M3 | UART Connection Status | Background thread for 1s ping sending, 500ms timeout check, status badge | M1 | DONE (0434a275-cb55-47fe-b85f-cc0f90988208) |
+| M4 | Robot Telemetry & Speed Colors | Draw 3-wheel chassis, color-coded speeds next to rear wheels | M2 | DONE (0434a275-cb55-47fe-b85f-cc0f90988208) |
+| M5 | IMU Heading & Speed Limits | MPU6050 Z-axis gyro integration, speed limits [ / ] keys, L / B indicators | M2 | DONE (0434a275-cb55-47fe-b85f-cc0f90988208) |
+| M6 | Live Serial Monitor Panel | Bordered sub-window displaying rolling 10 lines of incoming serial data | M2, M3 | DONE (0434a275-cb55-47fe-b85f-cc0f90988208) |
+| M7 | E2E Integration Verification | Final verification of all combined requirements (TUI controls, ESP8266 response, compile & run tests) | M1 to M6 | DONE (00a22717-337e-4f02-863e-c1ea9d43cbf0) |
+
+## Code Layout
+- `/Users/roopalisingh/DPSI-LFR/rbpi_package/cli.py` - TUI dashboard interface
+- `/Users/roopalisingh/DPSI-LFR/rbpi_package/hardware.py` - Hardware interface for serial
+- `/Users/roopalisingh/DPSI-LFR/Self_Test_Diagnostics/src/main.cpp` - ESP8266 main loop and UART command parser
+- `/Users/roopalisingh/DPSI-LFR/ascii-art.txt` - ASCII Art text file
 
 ## Interface Contracts
-### Raspberry Pi ↔ ESP8266 (Serial Interface)
-- Format: `M:<left_speed>,<right_speed>\n`
-- Bounds: `left_speed`, `right_speed` are float representations strictly clamped to `[-1.0, 1.0]`.
-- Precision: 4 decimal places (e.g. `M:0.1234,-0.5678\n`).
-- Frequency: Sent on control loop updates (typically 20-30Hz).
-
-### Web Client ↔ ESP8266 (WebSocket Interface)
-- JSON control frame format:
-  - Arming: `{ "action": "arm", "value": true|false }`
-  - Control Mode: `{ "action": "mode", "value": "auto"|"manual" }`
-  - Manual Joystick Speed: `{ "action": "motor", "left": <float>, "right": <float> }`
-- Telemetry broadcast format:
-  - `{ "armed": true|false, "mode": "auto"|"manual", ... }`
+### Raspberry Pi ↔ ESP8266 (Serial Text Protocol)
+- `M:<left>,<right>\n`: Float values in range [-1.0, 1.0].
+- `A:<val>\n`: integer 0 or 1.
+- `C:<val>\n`: integer 0 or 1.
+- `P\n`: Connection ping, no arguments.
+- `P_ACK\n`: Connection acknowledgement, sent by ESP8266 immediately on receipt of `P\n`.

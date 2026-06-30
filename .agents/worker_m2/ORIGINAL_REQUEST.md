@@ -23,3 +23,21 @@ Prompt Design Requirements for `Claude_Diagnostics_Prompt.md`:
 
 STRICT CONSTRAINT:
 Do NOT create any `.ino`, `.cpp`, `.h`, or `.py` code files. ONLY create `/Users/roopalisingh/DPSI-LFR/Self_Test_Diagnostics/prompts/Claude_Diagnostics_Prompt.md`.
+
+## 2026-06-30T14:46:39Z
+
+/goal
+
+Apply the proposed Python Curses TUI and Serial changes for Milestone 2:
+1. Replace `rbpi_package/cli.py` with the contents of `/Users/roopalisingh/DPSI-LFR/.agents/explorer_m2/proposed_cli.py`.
+2. Replace `rbpi_package/hardware.py` with the contents of `/Users/roopalisingh/DPSI-LFR/.agents/explorer_m2/proposed_hardware.py`.
+Wait, do not write code directly using file creation tools unless they are the designated tools for file modification. Use your tools to make the code changes.
+3. Verify the changes by running unit tests from within `rbpi_package` directory:
+   `python3 -m unittest test_hardware.py`
+4. Verify syntax correctness of `cli.py` and `hardware.py`:
+   `python3 -m py_compile rbpi_package/cli.py rbpi_package/hardware.py`
+5. Write a handoff report in `/Users/roopalisingh/DPSI-LFR/.agents/worker_m2/handoff.md` summarizing the changes, commands run, and test outputs.
+
+MANDATORY INTEGRITY WARNING:
+DO NOT CHEAT. All implementations must be genuine. DO NOT hardcode test results, create dummy/facade implementations, or circumvent the intended task. A Forensic Auditor will independently verify your work. Integrity violations WILL be detected and your work WILL be rejected.
+

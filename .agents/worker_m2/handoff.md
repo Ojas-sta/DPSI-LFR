@@ -1,25 +1,44 @@
-# Handoff Report — Worker M2
+# Handoff Report — Worker M2 (TUI and Serial Changes)
 
 ## 1. Observation
-- Inspected physical hardware pin mappings and system configuration from `/Users/roopalisingh/DPSI-LFR/v2_esp32_firmware/Config.h`.
-- Identified L298N motor pins (Left: ENA 11, IN1 12, IN2 13; Right: ENB 47, IN3 14, IN4 21; PWM 20kHz, 8-bit resolution) and 10x IR sensor pins (GPIOs 1, 2, 4, 5, 6, 7, 15, 16, 17, 18).
-- Verified timing and safety constraints: 500ms motor watchdog timeout, 20Hz telemetry update rate.
-- Authored the comprehensive master prompt file directly at `/Users/roopalisingh/DPSI-LFR/Self_Test_Diagnostics/prompts/Claude_Diagnostics_Prompt.md`.
+- We viewed the proposed change files at:
+  - `/Users/roopalisingh/DPSI-LFR/.agents/explorer_m2/proposed_cli.py` (459 lines)
+  - `/Users/roopalisingh/DPSI-LFR/.agents/explorer_m2/proposed_hardware.py` (246 lines)
+- We verified the baseline tests in `rbpi_package` using `python3 -m unittest test_hardware.py`:
+  ```
+  Ran 3 tests in 0.001s
+  OK
+  ```
+- We replaced the contents of `rbpi_package/cli.py` and `rbpi_package/hardware.py` with the contents of the proposed files.
+- We added three new unit tests to `rbpi_package/test_hardware.py` to cover the new methods/parameters (e.g. `switch_port`, `send_arm`, `send_mode`).
+- We verified syntax correctness using:
+  `python3 -m py_compile rbpi_package/cli.py rbpi_package/hardware.py rbpi_package/test_hardware.py`
+  which completed successfully with no warnings or errors.
+- We verified correctness by running the tests inside the `rbpi_package` directory:
+  `python3 -m unittest test_hardware.py`
+  which completed successfully:
+  ```
+  Ran 6 tests in 0.002s
+  OK
+  ```
 
 ## 2. Logic Chain
-- Goal: Create a production-grade master prompt for Claude Code to generate standalone ESP32-S3 hardware diagnostics firmware.
-- Step 1: Reference exact hardware specs from `Config.h` to ensure 100% pin accuracy and timing compatibility.
-- Step 2: Structure the master prompt into logical hardware, networking, web, security, and build configuration specifications.
-- Step 3: Embed explicit instructions for Claude Code to handle PlatformIO setup (`ESPAsyncWebServer`, `AsyncTCP`, `ArduinoJson`), asynchronous web server hosting, low-latency WebSockets, 500ms watchdog auto-stop, and zero-delay `millis()` timing loops.
-- Step 4: Include ready-to-use HTML/CSS/JS dashboard requirements (touch D-Pad, dual motor sliders, keyboard controls, 10x IR live indicators).
-- Step 5: Strictly adhere to the constraint of creating ONLY the prompt markdown file and avoiding creation of `.cpp`, `.h`, `.ino`, or `.py` code files.
+- Goal: Apply the proposed Python Curses TUI and Serial changes for Milestone 2.
+- Step 1: Use `replace_file_content` to replace the old contents of `rbpi_package/cli.py` and `rbpi_package/hardware.py` with the new proposed versions.
+- Step 2: Write tests in `test_hardware.py` covering the newly implemented fields and functions (`switch_port`, `send_arm`, `send_mode`) to comply with the Test Enhancement mandate.
+- Step 3: Run the Python syntax checker (`py_compile`) on the updated files to confirm they are error-free.
+- Step 4: Execute the test suite using `unittest` to verify behavior correctness.
 
 ## 3. Caveats
-- No caveats. The prompt is fully self-contained and formatted for immediate consumption by Claude Code or any autonomous coding assistant.
+- Actual TUI execution requires a curses-compatible terminal.
+- Physical Serial communication interfaces are mocked for test stability.
 
 ## 4. Conclusion
-- The master prompt file `/Users/roopalisingh/DPSI-LFR/Self_Test_Diagnostics/prompts/Claude_Diagnostics_Prompt.md` has been successfully created and finalized.
+- The Python Curses TUI and Serial updates for Milestone 2 have been successfully applied, tested, and verified.
 
 ## 5. Verification Method
-- Execute `cat /Users/roopalisingh/DPSI-LFR/Self_Test_Diagnostics/prompts/Claude_Diagnostics_Prompt.md` or view the file to verify completeness, formatting, pin mapping tables, and operational instructions.
-- Confirm no code files (`.cpp`, `.h`, `.ino`, `.py`) were generated.
+- Execute the following command from the project root directory:
+  `python3 -m py_compile rbpi_package/cli.py rbpi_package/hardware.py`
+- Execute the following command from within the `rbpi_package` directory:
+  `python3 -m unittest test_hardware.py`
+- Confirm that 6 tests run and all pass.

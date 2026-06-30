@@ -153,11 +153,25 @@ void run_test_uart_scaling_constraints() {
     std::cout << "  PASS: Float commands correctly scaled by 255.0f and clamped to [-255, 255]." << std::endl;
 }
 
+void run_test_ping_pong() {
+    std::cout << "[TEST] Running Ping-Pong Command Tests..." << std::endl;
+    Serial.clear();
+    Serial.feed("P\n");
+    handleSerialInput();
+    if (Serial.tx_buffer.str() != "P_ACK\n") {
+        std::cerr << "  FAIL: Ping command did not respond with P_ACK\\n! Got: "
+                  << Serial.tx_buffer.str() << std::endl;
+        exit(1);
+    }
+    std::cout << "  PASS: Ping command correctly responded with P_ACK\\n." << std::endl;
+}
+
 int main() {
     std::cout << "=== ESP8266 FIRMWARE VERIFICATION START ===" << std::endl;
     run_test_safety_overrides();
     run_test_auto_mode();
     run_test_uart_scaling_constraints();
+    run_test_ping_pong();
     std::cout << "=== ALL TESTS PASSED SUCCESSFULLY ===" << std::endl;
     return 0;
 }

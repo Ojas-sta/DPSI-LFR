@@ -1,0 +1,39 @@
+diff --git a/Self_Test_Diagnostics/src/main.cpp b/Self_Test_Diagnostics/src/main.cpp
+--- a/Self_Test_Diagnostics/src/main.cpp
++++ b/Self_Test_Diagnostics/src/main.cpp
+@@ -51,5 +51,7 @@
+                     if (sscanf(rx_buffer + 2, "%d", &mode_val) == 1) {
+                         g_auto_mode = (mode_val != 0);
+                     }
++                } else if (strcmp(rx_buffer, "P") == 0) {
++                    Serial.println("P_ACK");
+                 }
+                 rx_index = 0;
+diff --git a/Self_Test_Diagnostics/test/test_firmware.cpp b/Self_Test_Diagnostics/test/test_firmware.cpp
+--- a/Self_Test_Diagnostics/test/test_firmware.cpp
++++ b/Self_Test_Diagnostics/test/test_firmware.cpp
+@@ -154,6 +154,18 @@
+ }
+ 
++void run_test_ping_pong() {
++    std::cout << "[TEST] Running Ping-Pong Command Tests..." << std::endl;
++    Serial.clear();
++    Serial.feed("P\n");
++    handleSerialInput();
++    std::string output = Serial.tx_buffer.str();
++    if (output != "P_ACK\n") {
++        std::cerr << "  FAIL: Expected \"P_ACK\\n\", got \"" << output << "\"" << std::endl;
++        exit(1);
++    }
++    std::cout << "  PASS: Serial ping 'P\\n' responded with 'P_ACK\\n'." << std::endl;
++}
++
+ int main() {
+     std::cout << "=== ESP8266 FIRMWARE VERIFICATION START ===" << std::endl;
+     run_test_safety_overrides();
+     run_test_auto_mode();
+     run_test_uart_scaling_constraints();
++    run_test_ping_pong();
+     std::cout << "=== ALL TESTS PASSED SUCCESSFULLY ===" << std::endl;
+     return 0;
+ }

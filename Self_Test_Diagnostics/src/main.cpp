@@ -51,6 +51,8 @@ void handleSerialInput() {
                     if (sscanf(rx_buffer + 2, "%d", &mode_val) == 1) {
                         g_auto_mode = (mode_val != 0);
                     }
+                } else if (strcmp(rx_buffer, "P") == 0) {
+                    Serial.print("P_ACK\n");
                 }
                 rx_index = 0;
             }

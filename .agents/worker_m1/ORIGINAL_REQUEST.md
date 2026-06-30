@@ -37,3 +37,21 @@ Requirements for each file:
 
 STRICT CONSTRAINT:
 Do NOT create any `.ino`, `.cpp`, `.h`, or `.py` code files. ONLY generate the 4 `.md` files under `/Users/roopalisingh/DPSI-LFR/Self_Test_Diagnostics/knowledge/`. Write thorough, production-grade technical markdown documentation.
+
+## 2026-06-30T20:10:27Z
+/goal
+
+Apply the proposed patch for the ESP8266 ping-pong protocol to `Self_Test_Diagnostics/src/main.cpp` and `Self_Test_Diagnostics/test/test_firmware.cpp`.
+
+Patch location: `/Users/roopalisingh/DPSI-LFR/.agents/explorer_m1_3/m1_ping_pong.patch`
+
+After applying the patch:
+1. Compile and run the unit tests in `Self_Test_Diagnostics/test`:
+   `g++ -O3 -Wall -std=c++17 -o test_runner_bin test_firmware.cpp mock_arduino.cpp ../src/Motors.cpp ../src/WebDiagnostics.cpp ../src/main.cpp -I../src -I. && ./test_runner_bin`
+2. Run `pio run` in `Self_Test_Diagnostics` to verify that PlatformIO builds the ESP8266 diagnostics firmware without compilation errors.
+3. Write a handoff report in `/Users/roopalisingh/DPSI-LFR/.agents/worker_m1/handoff.md` with:
+   - Observation, logic chain, caveats, and conclusion.
+   - Exact command line invocations and output verification.
+
+MANDATORY INTEGRITY WARNING:
+DO NOT CHEAT. All implementations must be genuine. DO NOT hardcode test results, create dummy/facade implementations, or circumvent the intended task. A Forensic Auditor will independently verify your work. Integrity violations WILL be detected and your work WILL be rejected.

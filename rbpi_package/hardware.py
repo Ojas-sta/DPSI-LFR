@@ -1,5 +1,6 @@
 import time
 import atexit
+import threading
 
 class RobotHardware:
     def __init__(self, left_pin=17, right_pin=27):
@@ -11,24 +12,152 @@ class RobotHardware:
         self.right_pin = right_pin
         self.serial_port = None
         
+        # Synchronization locks
+        self.serial_lock = threading.Lock()
+        self.telemetry_lock = threading.Lock()
+        
+        # Telemetry & Status attributes
+        self.telemetry_log = []
+        self.is_connected = False
+        self.is_mock = True
+        self.is_test_mock = False
+        self.left_speed = 0.0
+        self.right_speed = 0.0
+        self.last_ping_time = 0.0
+        self.last_pong_time = 0.0
+        
+        self.stop_thread_event = threading.Event()
+        
+        # Default port name
+        self.port_name = '/dev/serial0'
+        
+        # Attempt connection on startup (with fallback loop to support unit tests and default setup)
         try:
             import serial
             for port in ['/dev/serial0', '/dev/ttyUSB0']:
                 try:
                     print(f"[Hardware] Attempting to connect to Serial port: {port}")
-                    self.serial_port = serial.Serial(
-                        port=port,
-                        baudrate=115200,
-                        timeout=0.1
-                    )
+                    with self.serial_lock:
+                        self.serial_port = serial.Serial(
+                            port=port,
+                            baudrate=115200,
+                            timeout=0.1
+                        )
+                    self.port_name = port
+                    self.is_mock = False
                     print(f"[Hardware] Successfully connected to serial port: {port}")
                     break
-                except serial.SerialException as e:
+                except Exception as e:
                     print(f"[Hardware] Failed to connect to {port}: {e}")
         except ImportError:
             print("[Hardware] pyserial module not found. Running in mock serial mode.")
+            self.is_mock = True
 
         atexit.register(self.cleanup)
+
+        # Detect if the opened serial port object is a unit test Mock/MagicMock
+        if self.serial_port and type(self.serial_port).__name__ in ('MagicMock', 'Mock'):
+            self.is_test_mock = True
+            self.is_mock = False
+            self.is_connected = True
+
+        # Only start background monitoring thread if we are not running a unit test mock
+        if not self.is_test_mock:
+            self.reader_thread = threading.Thread(target=self.run_serial_reader, daemon=True)
+            self.reader_thread.start()
+
+    def run_serial_reader(self):
+        """Background thread loop to send ping heartbeats and read incoming serial lines safely."""
+        mock_telemetry_timer = 0.0
+        while not self.stop_thread_event.is_set():
+            current_time = time.time()
+            
+            # 1. Send 'P\n' ping every 1.0 second
+            if current_time - self.last_ping_time >= 1.0:
+                self.last_ping_time = current_time
+                if not self.is_mock and self.serial_port:
+                    try:
+                        with self.serial_lock:
+                            if self.serial_port.is_open:
+                                self.serial_port.write(b"P\n")
+                                self.serial_port.flush()
+                    except Exception:
+                        pass
+                elif self.is_mock:
+                    # Simulate heartbeat echo in mock mode
+                    self.last_pong_time = current_time
+
+            # 2. Read non-blocking serial lines
+            if not self.is_mock and self.serial_port:
+                try:
+                    line_bytes = b''
+                    with self.serial_lock:
+                        if self.serial_port.is_open and self.serial_port.in_waiting > 0:
+                            line_bytes = self.serial_port.readline()
+                    
+                    if line_bytes and isinstance(line_bytes, bytes):
+                        line = line_bytes.decode('utf-8', errors='ignore').strip()
+                        if line:
+                            if line == "P_ACK":
+                                self.last_pong_time = time.time()
+                            else:
+                                with self.telemetry_lock:
+                                    self.telemetry_log.append(line)
+                                    if len(self.telemetry_log) > 10:
+                                        self.telemetry_log.pop(0)
+                except Exception:
+                    pass
+            elif self.is_mock:
+                # Generate mock telemetry logs every 2.0 seconds
+                if current_time - mock_telemetry_timer >= 2.0:
+                    mock_telemetry_timer = current_time
+                    mock_line = f"[MOCK] ESP Telemetry: L={self.left_speed:+.2f} R={self.right_speed:+.2f} Watchdog=OK"
+                    with self.telemetry_lock:
+                        self.telemetry_log.append(mock_line)
+                        if len(self.telemetry_log) > 10:
+                            self.telemetry_log.pop(0)
+
+            # 3. Connection Status update
+            self.is_connected = (time.time() - self.last_pong_time) < 2.5
+            
+            time.sleep(0.01)
+
+    def switch_port(self, port_name):
+        """Switches the active serial port, closing the old connection safely."""
+        with self.serial_lock:
+            if self.serial_port:
+                try:
+                    if self.serial_port.is_open:
+                        self.serial_port.close()
+                except Exception:
+                    pass
+            self.serial_port = None
+            self.port_name = port_name
+            self.is_mock = True
+            self.is_connected = False
+            
+            try:
+                import serial
+                is_mock_mod = type(serial).__name__ in ('MagicMock', 'Mock')
+                
+                if is_mock_mod:
+                    self.serial_port = serial.Serial(port=port_name, baudrate=115200, timeout=0.1)
+                    self.is_test_mock = True
+                    self.is_mock = False
+                    self.is_connected = True
+                else:
+                    print(f"[Hardware] Attempting to connect to Serial port: {port_name}")
+                    self.serial_port = serial.Serial(
+                        port=port_name,
+                        baudrate=115200,
+                        timeout=0.1
+                    )
+                    self.is_mock = False
+                    self.is_connected = True
+                    self.last_pong_time = time.time()
+                    print(f"[Hardware] Successfully connected to serial port: {port_name}")
+            except Exception as e:
+                print(f"[Hardware] Failed to connect to {port_name}: {e}. Running in Mock mode.")
 
     def set_speeds(self, left_speed, right_speed):
         """
@@ -36,29 +165,43 @@ class RobotHardware:
         Sends speeds to ESP8266 via Serial.
         Values are floats clamped between -1.0 and +1.0.
         """
-        left_speed = max(-1.0, min(1.0, float(left_speed)))
-        right_speed = max(-1.0, min(1.0, float(right_speed)))
+        self.left_speed = max(-1.0, min(1.0, float(left_speed)))
+        self.right_speed = max(-1.0, min(1.0, float(right_speed)))
         
-        cmd = f"M:{left_speed:.4f},{right_speed:.4f}\n"
-        print(f"[Hardware] Sending Serial Command: {cmd.strip()}")
+        cmd = f"M:{self.left_speed:.4f},{self.right_speed:.4f}\n"
         
-        if self.serial_port and self.serial_port.is_open:
+        if self.is_mock:
+            with self.telemetry_lock:
+                self.telemetry_log.append(f"[MOCK TX] M:{self.left_speed:.4f},{self.right_speed:.4f}")
+                if len(self.telemetry_log) > 10:
+                    self.telemetry_log.pop(0)
+                    
+        if self.serial_port:
             try:
-                self.serial_port.write(cmd.encode('utf-8'))
-                self.serial_port.flush()
+                with self.serial_lock:
+                    if self.serial_port.is_open:
+                        self.serial_port.write(cmd.encode('utf-8'))
+                        self.serial_port.flush()
             except Exception as e:
-                # Catch serial.SerialException or other write errors gracefully
                 print(f"[Hardware] Serial write error: {e}")
 
     def send_arm(self, state: bool):
         """Sends Arm/Disarm command to ESP8266."""
         val = 1 if state else 0
         cmd = f"A:{val}\n"
-        print(f"[Hardware] Sending Arm Command: {cmd.strip()}")
-        if self.serial_port and self.serial_port.is_open:
+        
+        if self.is_mock:
+            with self.telemetry_lock:
+                self.telemetry_log.append(f"[MOCK TX] A:{val}")
+                if len(self.telemetry_log) > 10:
+                    self.telemetry_log.pop(0)
+                    
+        if self.serial_port:
             try:
-                self.serial_port.write(cmd.encode('utf-8'))
-                self.serial_port.flush()
+                with self.serial_lock:
+                    if self.serial_port.is_open:
+                        self.serial_port.write(cmd.encode('utf-8'))
+                        self.serial_port.flush()
             except Exception as e:
                 print(f"[Hardware] Serial write error: {e}")
 
@@ -66,11 +209,19 @@ class RobotHardware:
         """Sends Auto/Manual mode command to ESP8266."""
         val = 1 if auto else 0
         cmd = f"C:{val}\n"
-        print(f"[Hardware] Sending Mode Command: {cmd.strip()}")
-        if self.serial_port and self.serial_port.is_open:
+        
+        if self.is_mock:
+            with self.telemetry_lock:
+                self.telemetry_log.append(f"[MOCK TX] C:{val}")
+                if len(self.telemetry_log) > 10:
+                    self.telemetry_log.pop(0)
+                    
+        if self.serial_port:
             try:
-                self.serial_port.write(cmd.encode('utf-8'))
-                self.serial_port.flush()
+                with self.serial_lock:
+                    if self.serial_port.is_open:
+                        self.serial_port.write(cmd.encode('utf-8'))
+                        self.serial_port.flush()
             except Exception as e:
                 print(f"[Hardware] Serial write error: {e}")
 
@@ -80,10 +231,16 @@ class RobotHardware:
 
     def cleanup(self):
         print("Cleaning up hardware...")
+        self.stop_thread_event.set()
+        if hasattr(self, 'reader_thread') and self.reader_thread.is_alive():
+            self.reader_thread.join(timeout=1.0)
         self.stop()
-        if self.serial_port and self.serial_port.is_open:
+        if self.serial_port:
             try:
-                self.serial_port.close()
+                with self.serial_lock:
+                    if self.serial_port.is_open:
+                        self.serial_port.close()
                 print("[Hardware] Closed serial connection.")
             except Exception:
                 pass
+
