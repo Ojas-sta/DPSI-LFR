@@ -37,5 +37,18 @@ echo " You can now launch the dashboard by typing:"
 echo "   lfr-cli"
 echo "=========================================="
 
-# Automatically launch it now
-lfr-cli
+# Automatically launch it now with path fallback
+if command -v lfr-cli &> /dev/null; then
+    lfr-cli
+else
+    export PATH="$HOME/.local/bin:$PATH"
+    if ! grep -q ".local/bin" "$HOME/.bashrc"; then
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
+        echo "=> Added ~/.local/bin to ~/.bashrc"
+    fi
+    if command -v lfr-cli &> /dev/null; then
+        lfr-cli
+    else
+        echo "Error: Could not find lfr-cli in PATH or ~/.local/bin/"
+    fi
+fi
