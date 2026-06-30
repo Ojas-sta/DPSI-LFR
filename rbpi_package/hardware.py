@@ -69,10 +69,24 @@ class RobotHardware:
     def run_serial_reader(self):
         """Background thread loop to send ping heartbeats and read incoming serial lines safely."""
         mock_telemetry_timer = 0.0
+        last_motor_send_time = 0.0
         while not self.stop_thread_event.is_set():
             current_time = time.time()
             
-            # 1. Send 'P\n' ping every 1.0 second
+            # 1. Send continuous Motor commands (M:) every 200ms to feed ESP Watchdog
+            if current_time - last_motor_send_time >= 0.2:
+                last_motor_send_time = current_time
+                if not self.is_mock and self.serial_port:
+                    try:
+                        with self.serial_lock:
+                            if self.serial_port.is_open:
+                                cmd = f"M:{self.left_speed:.4f},{self.right_speed:.4f}\n"
+                                self.serial_port.write(cmd.encode('utf-8'))
+                                self.serial_port.flush()
+                    except Exception:
+                        pass
+                        
+            # 2. Send 'P\n' ping every 1.0 second
             if current_time - self.last_ping_time >= 1.0:
                 self.last_ping_time = current_time
                 if not self.is_mock and self.serial_port:
