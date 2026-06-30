@@ -16,9 +16,8 @@ void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType 
     } else if (type == WS_EVT_DATA) {
         AwsFrameInfo *info = (AwsFrameInfo*)arg;
         if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
-            data[len] = 0;
             StaticJsonDocument<200> doc;
-            DeserializationError err = deserializeJson(doc, data);
+            DeserializationError err = deserializeJson(doc, data, len);
             if (!err) {
                 const char* action = doc["action"];
                 if (action && strcmp(action, "motor") == 0) {

@@ -5,7 +5,7 @@
 #define AP_PASS "" // Open Network
 
 // System Timing
-#define TELEMETRY_INTERVAL_MS 50
+#define TELEMETRY_INTERVAL_MS 100
 #define WATCHDOG_TIMEOUT_MS   500
 
 // Motor Control Pins (Grouped sequentially using NodeMCU D-pin constants)
