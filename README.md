@@ -69,6 +69,40 @@ This repository was architected using the **AI-KOS (AI Knowledge Operating Syste
 ### Development Contracts (`AI-KOS/knowledge/06 Development/`)
 * `File_Structure_and_Component_Design.md`: The structural contract binding the C++ (`v2_esp32_firmware/`) and Python (`v2_pi_core/`) directories together, establishing class boundaries and function signatures.
 
+## 🛠️ Diagnostics & CLI Utilities (V2 Node MCU & Pi)
+
+For rapid hardware validation and manual override, this repository features a standalone two-node testing and diagnostic suite.
+
+### 1. ESP8266 Diagnostics Firmware (`Self_Test_Diagnostics/`)
+The ESP8266 acts as a differential motor actuator hosting:
+* **High-Speed WebSocket Web Server**: Hosts a local Access Point that serves a responsive diagnostic web dashboard showing real-time telemetry, a virtual joystick, and emergency controls.
+* **Safety Protocol (Arm/Disarm)**: For safety, motors are forced to `0` PWM by default when the system is **DISARMED**. You must explicitly toggle **ARM** via the dashboard or serial command to enable movements.
+* **Dual Control Modes**: Toggle between **AUTO** (listens for UART motor commands from the Raspberry Pi) and **MANUAL** (steerable via the Web Dashboard joystick or keyboard).
+* **UART Parser**: Parses command streams over USB/UART (`M:left_float,right_float\n`, `A:arm_int\n`, `C:auto_int\n`).
+
+### 2. Raspberry Pi CLI Package (`rbpi_package/`)
+A fully installable Python utility package providing an interactive Terminal User Interface (TUI) and configuration wizard.
+
+* **Self-Updating**: The CLI checks your GitHub repository on launch, pulls any new updates, upgrades dependencies, and automatically restarts.
+* **Dual-UART Connection**: Automatically attempts connections over both Hardware UART (`/dev/serial0`) and USB Serial (`/dev/ttyUSB0`) so you can connect the Pi to the ESP8266 either way.
+* **Interactive Control**: Toggle Arm/Disarm, switch Auto/Manual modes, and drive the robot with `W`, `A`, `S`, `D` keys directly via SSH.
+
+---
+
+## 🚀 1-Command Raspberry Pi Setup
+
+To install and launch the CLI setup utility on your Raspberry Pi automatically, run the following command in your terminal:
+
+```bash
+curl -sL https://raw.githubusercontent.com/Ojas-sta/DPSI-LFR/refs/heads/DPSI_LFR_v2/rbpi_package/install.sh | bash
+```
+
+This single command will:
+1. Install system prerequisites (git, python3-pip, python3-opencv, etc.).
+2. Clone or pull the latest repository branch.
+3. Install the `rbpi_package` globally.
+4. Launch the `lfr-cli` setup wizard and TUI.
+
 ---
 
 *Note: For an interactive map of these documents, refer to the `DPSI_LFR_Obsidian_Hub.md` file in the root directory if you are using Obsidian.*
