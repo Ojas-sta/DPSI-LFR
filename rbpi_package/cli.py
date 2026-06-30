@@ -160,6 +160,8 @@ def run_tui(stdscr):
     
     # Boot feedback indicator (red solid indicating disarmed initially)
     feedback.indicate_disarmed()
+    
+    key_timestamps = {}
 
     while True:
         # Read terminal dimensions dynamically
@@ -345,7 +347,15 @@ def run_tui(stdscr):
         stdscr.refresh()
         
         c = stdscr.getch()
+        now = time.time()
         if c != -1:
+            try:
+                k = chr(c).lower()
+                if k in ['w', 's', 'a', 'd']:
+                    key_timestamps[k] = now
+            except Exception:
+                pass
+
             if c in (ord('x'), ord('X')):
                 break
             
@@ -373,6 +383,7 @@ def run_tui(stdscr):
             # Emergency Stop
             elif c == ord(' '):
                 robot.stop()
+                key_timestamps.clear()
                 status_msg = "Emergency Stop executed!"
                 
             # Speed Cap Tuning using `[` and `]` (10% increments, clamped between 10% and 100%)
@@ -427,27 +438,55 @@ def run_tui(stdscr):
                 robot.switch_port(new_port)
                 status_msg = f"Switched port to {new_port}."
                 
-            # Manual Drive Controls (Only works if in MANUAL mode and ARMED)
-            elif mode == "MANUAL" and armed:
-                base_speed_fw = 0.8
-                base_speed_turn = 0.6
-                
-                if c in (ord('w'), ord('W')):
-                    spd = base_speed_fw * speed_cap
-                    robot.set_speeds(spd, spd)
-                    status_msg = f"Driving Forward at speed: {spd:.2f}"
-                elif c in (ord('s'), ord('S')):
-                    spd = -base_speed_fw * speed_cap
-                    robot.set_speeds(spd, spd)
-                    status_msg = f"Driving Backward at speed: {spd:.2f}"
-                elif c in (ord('a'), ord('A')):
-                    spd = base_speed_turn * speed_cap
-                    robot.set_speeds(-spd, spd)
-                    status_msg = f"Turning Left at speed: {spd:.2f}"
-                elif c in (ord('d'), ord('D')):
-                    spd = base_speed_turn * speed_cap
-                    robot.set_speeds(spd, -spd)
-                    status_msg = f"Turning Right at speed: {spd:.2f}"
+        # Manual Drive Controls (Only works if in MANUAL mode and ARMED)
+        if mode == "MANUAL" and armed:
+            # Determine active movement keys based on 0.15s decay
+            active_w = (now - key_timestamps.get('w', 0)) < 0.15
+            active_s = (now - key_timestamps.get('s', 0)) < 0.15
+            active_a = (now - key_timestamps.get('a', 0)) < 0.15
+            active_d = (now - key_timestamps.get('d', 0)) < 0.15
+            
+            base_speed_fw = 0.8
+            base_speed_turn = 0.6
+            
+            if active_w and active_a:
+                # W+A: Curve Left
+                spd = base_speed_fw * speed_cap
+                robot.set_speeds(spd * 0.4, spd)
+                status_msg = f"Curving Left (W+A) at speed: {spd:.2f}"
+            elif active_w and active_d:
+                # W+D: Curve Right
+                spd = base_speed_fw * speed_cap
+                robot.set_speeds(spd, spd * 0.4)
+                status_msg = f"Curving Right (W+D) at speed: {spd:.2f}"
+            elif active_s and active_a:
+                # S+A: Curve Back-Left
+                spd = base_speed_fw * speed_cap
+                robot.set_speeds(-spd * 0.4, -spd)
+                status_msg = f"Curving Back-Left (S+A) at speed: {spd:.2f}"
+            elif active_s and active_d:
+                # S+D: Curve Back-Right
+                spd = base_speed_fw * speed_cap
+                robot.set_speeds(-spd, -spd * 0.4)
+                status_msg = f"Curving Back-Right (S+D) at speed: {spd:.2f}"
+            elif active_w:
+                spd = base_speed_fw * speed_cap
+                robot.set_speeds(spd, spd)
+                status_msg = f"Driving Forward at speed: {spd:.2f}"
+            elif active_s:
+                spd = -base_speed_fw * speed_cap
+                robot.set_speeds(spd, spd)
+                status_msg = f"Driving Backward at speed: {spd:.2f}"
+            elif active_a:
+                spd = base_speed_turn * speed_cap
+                robot.set_speeds(-spd, spd)
+                status_msg = f"Turning Left at speed: {spd:.2f}"
+            elif active_d:
+                spd = base_speed_turn * speed_cap
+                robot.set_speeds(spd, -spd)
+                status_msg = f"Turning Right at speed: {spd:.2f}"
+            else:
+                robot.set_speeds(0.0, 0.0)
                     
         time.sleep(0.05)
 

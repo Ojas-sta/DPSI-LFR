@@ -80,7 +80,7 @@ class RobotHardware:
                     try:
                         with self.serial_lock:
                             if self.serial_port.is_open:
-                                cmd = f"M:{self.left_speed:.4f},{self.right_speed:.4f}\n"
+                                cmd = f"M:{self.right_speed:.4f},{self.left_speed:.4f}\n"
                                 self.serial_port.write(cmd.encode('utf-8'))
                                 self.serial_port.flush()
                     except Exception:
@@ -182,7 +182,7 @@ class RobotHardware:
         self.left_speed = max(-1.0, min(1.0, float(left_speed)))
         self.right_speed = max(-1.0, min(1.0, float(right_speed)))
         
-        cmd = f"M:{self.left_speed:.4f},{self.right_speed:.4f}\n"
+        cmd = f"M:{self.right_speed:.4f},{self.left_speed:.4f}\n"
         
         if self.is_mock:
             with self.telemetry_lock:
