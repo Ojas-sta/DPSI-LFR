@@ -81,11 +81,20 @@ The ESP8266 acts as a differential motor actuator hosting:
 * **UART Parser**: Parses command streams over USB/UART (`M:left_float,right_float\n`, `A:arm_int\n`, `C:auto_int\n`).
 
 ### 2. Raspberry Pi CLI Package (`rbpi_package/`)
-A fully installable Python utility package providing an interactive Terminal User Interface (TUI) and configuration wizard.
+A fully installable, highly-optimized Python utility package providing an interactive Curses Terminal User Interface (TUI) and configuration wizard.
 
-* **Self-Updating**: The CLI checks your GitHub repository on launch, pulls any new updates, upgrades dependencies, and automatically restarts.
+* **High-Performance Curses TUI**: Features a sleek blue-purple theme, live color-coded speed indicators (Green for forward, Red for reverse), and a detailed 3-wheel differential ASCII chassis representation.
+* **Auto-Calibration & Skip**: Starts up with a 20-second gyroscope calibration routine to calculate zero-drift offsets. Can be instantly skipped on-the-fly by pressing **`S`**.
+* **Real-time IMU Compass**: Renders a dynamic 8-way compass disc that updates rotation in real-time based on the integrated MPU6050 yaw angle. Heading can be manually reset/re-calibrated to `0.0°` by pressing **`/`**.
+* **Active IMU Stabilization (ESP/Pi Feedback)**:
+  * **Steer Correction (Heading Lock) — Toggle with `C`**: Automatically locks the robot's heading when driving straight, applying proportional corrective adjustments (Kp=0.015) to maintain a perfect straight line regardless of physical wheel slippage or motor variance.
+  * **Steer Assist (Yaw Damping) — Toggle with `V`**: Uses active derivative damping (Kd=0.003) from gyroscope Z-axis rates to smooth out manual turning, eliminate wheel spin-out, and prevent rotational overshoot.
 * **Dual-UART Connection**: Automatically attempts connections over both Hardware UART (`/dev/serial0`) and USB Serial (`/dev/ttyUSB0`) so you can connect the Pi to the ESP8266 either way.
-* **Interactive Control**: Toggle Arm/Disarm, switch Auto/Manual modes, and drive the robot with `W`, `A`, `S`, `D` keys directly via SSH.
+* **Precision Driving & Curve Combinations**: 
+  * Allows keyboard driving in **MANUAL** mode with support for simultaneous key combos (e.g., **`W`+`A`** to curve Left, **`W`+`D`** to curve Right).
+  * Automatically stops the robot as a safety override if no key inputs are received for `0.15 seconds`, preventing runaways.
+  * Adjusts the speed cap using **`[`** and **`]`**, and drives/turns at maximum speeds (100% duty cycle) when cap is at 100%.
+* **Drift Trim Bias Tuning**: Fine-tune motor imbalances using **`,` (comma)** to adjust trim Left and **`.` (period)** to adjust trim Right, showing a visual slider representation `Trim: L [---|---] R`.
 
 ---
 

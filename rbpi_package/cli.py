@@ -582,51 +582,58 @@ def run_tui(stdscr):
         # Manual Drive Controls (Only works if in MANUAL mode and ARMED)
         if mode == "MANUAL" and armed:
             # Determine active movement keys based on 0.15s decay
+            # Standard terminals don't have keyup events; this decay tracks if keys are held
             active_w = (now - key_timestamps.get('w', 0)) < 0.15
             active_s = (now - key_timestamps.get('s', 0)) < 0.15
             active_a = (now - key_timestamps.get('a', 0)) < 0.15
             active_d = (now - key_timestamps.get('d', 0)) < 0.15
             
-            base_speed_fw = 0.8
-            base_speed_turn = 0.6
+            # Max speed configuration (1.0 turns/drives at 100% duty cycle modulated by speed cap)
+            base_speed_fw = 1.0
+            base_speed_turn = 1.0
             
             if active_w and active_a:
-                # W+A: Curve Left
+                # W+A Combination: Curve Left (outer wheel full speed, inner wheel scaled to 40%)
                 spd = base_speed_fw * speed_cap
                 robot.set_speeds(spd * 0.4, spd)
                 status_msg = f"Curving Left (W+A) at speed: {spd:.2f}"
             elif active_w and active_d:
-                # W+D: Curve Right
+                # W+D Combination: Curve Right (inner wheel scaled to 40%, outer wheel full speed)
                 spd = base_speed_fw * speed_cap
                 robot.set_speeds(spd, spd * 0.4)
                 status_msg = f"Curving Right (W+D) at speed: {spd:.2f}"
             elif active_s and active_a:
-                # S+A: Curve Back-Left
+                # S+A Combination: Curve Backwards Left (inner wheel scaled to 40%, outer wheel full speed)
                 spd = base_speed_fw * speed_cap
                 robot.set_speeds(-spd * 0.4, -spd)
                 status_msg = f"Curving Back-Left (S+A) at speed: {spd:.2f}"
             elif active_s and active_d:
-                # S+D: Curve Back-Right
+                # S+D Combination: Curve Backwards Right (inner wheel full speed, outer wheel scaled to 40%)
                 spd = base_speed_fw * speed_cap
                 robot.set_speeds(-spd, -spd * 0.4)
                 status_msg = f"Curving Back-Right (S+D) at speed: {spd:.2f}"
             elif active_w:
+                # W: Drive Forward at max speed
                 spd = base_speed_fw * speed_cap
                 robot.set_speeds(spd, spd)
                 status_msg = f"Driving Forward at speed: {spd:.2f}"
             elif active_s:
+                # S: Drive Backward at max speed
                 spd = -base_speed_fw * speed_cap
                 robot.set_speeds(spd, spd)
                 status_msg = f"Driving Backward at speed: {spd:.2f}"
             elif active_a:
+                # A: Spin Left on the spot (swapped in hardware.py to correct reversed channels)
                 spd = base_speed_turn * speed_cap
                 robot.set_speeds(-spd, spd)
                 status_msg = f"Turning Left at speed: {spd:.2f}"
             elif active_d:
+                # D: Spin Right on the spot (swapped in hardware.py to correct reversed channels)
                 spd = base_speed_turn * speed_cap
                 robot.set_speeds(spd, -spd)
                 status_msg = f"Turning Right at speed: {spd:.2f}"
             else:
+                # No keys active: Auto-stop safety override
                 robot.set_speeds(0.0, 0.0)
                     
         time.sleep(0.05)
