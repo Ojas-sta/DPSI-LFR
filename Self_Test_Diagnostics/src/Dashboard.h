@@ -182,8 +182,8 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
             
             let fwd = -dy / maxR;
             let trn = dx / maxR;
-            let l = fwd + trn;
-            let r = fwd - trn;
+            let l = fwd - trn;
+            let r = fwd + trn;
             let m = Math.max(Math.abs(l), Math.abs(r));
             if (m > 1) { l /= m; r /= m; }
             
