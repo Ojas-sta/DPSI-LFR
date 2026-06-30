@@ -214,6 +214,7 @@ def run_tui(stdscr):
             draw_box(stdscr, box_y, box_x, box_h, box_w, "IMU GYROSCOPE CALIBRATION", curses.color_pair(1))
             
             stdscr.addstr(box_y + 2, box_x + 4, "Calibrating MPU6050 sensor. Keep robot still!", curses.color_pair(6) | curses.A_BOLD)
+            stdscr.addstr(box_y + 3, box_x + 4, "Press [S] to skip calibration...", curses.color_pair(5) | curses.A_BOLD)
             
             progress = robot.calibration_progress
             bar_len = 48
@@ -224,6 +225,17 @@ def run_tui(stdscr):
             stdscr.addstr(box_y + 5, box_x + 5, f"Time remaining: {robot.calibration_duration * (1.0 - progress):2.0f}s", curses.color_pair(6))
             
             stdscr.refresh()
+            
+            # Listen for skip key
+            c_cal = stdscr.getch()
+            if c_cal != -1:
+                try:
+                    k_cal = chr(c_cal).lower()
+                    if k_cal == 's':
+                        robot.skip_calibration()
+                except Exception:
+                    pass
+                    
             time.sleep(0.1)
             continue
         
@@ -317,8 +329,18 @@ def run_tui(stdscr):
             stdscr.addstr(y_ptr + 5, left_x + 18, "Buzzer: ", curses.color_pair(6))
             stdscr.addstr(y_ptr + 5, left_x + 26, buz_str, buz_col | curses.A_BOLD)
             
+            # Steer Correction & Assist status
+            sc_str = "[ ON ]" if robot.steer_correction_enabled else "[ OFF ]"
+            sa_str = "[ ON ]" if robot.steer_assist_enabled else "[ OFF ]"
+            sc_col = curses.color_pair(3) if robot.steer_correction_enabled else curses.color_pair(4)
+            sa_col = curses.color_pair(3) if robot.steer_assist_enabled else curses.color_pair(4)
+            stdscr.addstr(y_ptr + 6, left_x, "Steer Corr:   ", curses.color_pair(6))
+            stdscr.addstr(y_ptr + 6, left_x + 12, sc_str, sc_col | curses.A_BOLD)
+            stdscr.addstr(y_ptr + 6, left_x + 22, "Steer Assist: ", curses.color_pair(6))
+            stdscr.addstr(y_ptr + 6, left_x + 36, sa_str, sa_col | curses.A_BOLD)
+            
             # Draw ASCII Chassis Diagram
-            chassis_y = y_ptr + 7
+            chassis_y = y_ptr + 8
             draw_chassis(stdscr, chassis_y, left_x, robot.left_speed, robot.right_speed, 
                          curses.color_pair(1), curses.color_pair(2), curses.color_pair(3), curses.color_pair(4))
             
@@ -333,16 +355,17 @@ def run_tui(stdscr):
             stdscr.addstr(help_y + 3, left_x, "[W,S] Drive Fwd/Rev   [A,D] Turn L/R (Manual only)", curses.color_pair(6))
             stdscr.addstr(help_y + 4, left_x, "[ [ ] Dec Speed Cap   [ ] ] Inc Speed Cap", curses.color_pair(6))
             stdscr.addstr(help_y + 5, left_x, "[ , ] Trim Left       [ . ] Trim Right", curses.color_pair(6))
-            stdscr.addstr(help_y + 6, left_x, "[L] Toggle LEDs       [B] Toggle Buzzer", curses.color_pair(6))
-            stdscr.addstr(help_y + 7, left_x, "[P] Switch Serial Port   [X] Exit CLI", curses.color_pair(6))
+            stdscr.addstr(help_y + 6, left_x, "[C] Steer Correction  [V] Steer Assist", curses.color_pair(6))
+            stdscr.addstr(help_y + 7, left_x, "[L] Toggle LEDs       [B] Toggle Buzzer", curses.color_pair(6))
+            stdscr.addstr(help_y + 8, left_x, "[P] Switch Serial Port   [X] Exit CLI", curses.color_pair(6))
             
             # Display recent System Log
-            stdscr.addstr(help_y + 9, left_x, f"System Log: {status_msg}", curses.color_pair(2) | curses.A_BOLD)
+            stdscr.addstr(help_y + 10, left_x, f"System Log: {status_msg}", curses.color_pair(2) | curses.A_BOLD)
             
             # --- Serial Monitor Bordered Box ---
             mon_x = 65
             mon_w = max_x - mon_x - 2
-            mon_h = (help_y + 10) - y_ptr
+            mon_h = (help_y + 11) - y_ptr
             
             draw_box(stdscr, y_ptr, mon_x, mon_h, mon_w, "Serial Telemetry Monitor (Last 10 lines)", curses.color_pair(1))
             
@@ -388,8 +411,17 @@ def run_tui(stdscr):
             stdscr.addstr(y_ptr + 4, left_x, f"Mode: {mode}", m_color | curses.A_BOLD)
             stdscr.addstr(y_ptr + 4, left_x + 20, f"Status: {'ARMED' if armed else 'DISARMED'}", a_color | curses.A_BOLD)
             
-            # Chassis (Row y_ptr + 6)
-            chassis_y = y_ptr + 6
+            # Steer Correction & Assist status
+            sc_str = "[ ON ]" if robot.steer_correction_enabled else "[ OFF ]"
+            sa_str = "[ ON ]" if robot.steer_assist_enabled else "[ OFF ]"
+            sc_col = curses.color_pair(3) if robot.steer_correction_enabled else curses.color_pair(4)
+            sa_col = curses.color_pair(3) if robot.steer_assist_enabled else curses.color_pair(4)
+            stdscr.addstr(y_ptr + 5, left_x, "Steer: ", curses.color_pair(6))
+            stdscr.addstr(y_ptr + 5, left_x + 7, f"Corr:{sc_str}", sc_col | curses.A_BOLD)
+            stdscr.addstr(y_ptr + 5, left_x + 20, f"Assist:{sa_str}", sa_col | curses.A_BOLD)
+            
+            # Chassis (Row y_ptr + 7)
+            chassis_y = y_ptr + 7
             draw_chassis(stdscr, chassis_y, left_x, robot.left_speed, robot.right_speed, 
                          curses.color_pair(1), curses.color_pair(2), curses.color_pair(3), curses.color_pair(4))
             
@@ -422,7 +454,7 @@ def run_tui(stdscr):
             
             # Draw compact control guide line at the bottom
             if max_y > 2:
-                help_msg = "[E] Arm [Q] Disarm [Space] Stop [,] Trim L [.] Trim R [/] Reset Yaw [X] Exit"
+                help_msg = "[E] Arm [Q] Disarm [Space] Stop [,] Trim L [.] Trim R [C] Corr [V] Assist [/] Reset Yaw [X] Exit"
                 try:
                     stdscr.addstr(max_y - 1, left_x, help_msg[:max_x - 4], curses.color_pair(1) | curses.A_BOLD)
                 except Exception:
@@ -488,6 +520,16 @@ def run_tui(stdscr):
             elif c == ord('.'):
                 robot.adjust_trim(0.01)
                 status_msg = f"Trim Bias shifted Right: {robot.trim_bias:+.2f}"
+                
+            # Steer Correction Toggle
+            elif c in (ord('c'), ord('C')):
+                robot.toggle_steer_correction()
+                status_msg = f"Steer Correction {'Enabled' if robot.steer_correction_enabled else 'Disabled'}."
+                
+            # Steer Assist Toggle
+            elif c in (ord('v'), ord('V')):
+                robot.toggle_steer_assist()
+                status_msg = f"Steer Assist {'Enabled' if robot.steer_assist_enabled else 'Disabled'}."
                 
             # Yaw Reset
             elif c == ord('/'):

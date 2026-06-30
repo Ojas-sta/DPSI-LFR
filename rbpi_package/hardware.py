@@ -37,6 +37,12 @@ class RobotHardware:
         # trim_bias < 0: reduces Left wheel (corrects drift to Right)
         self.trim_bias = 0.0
         
+        # Steering assist & heading correction
+        self.steer_correction_enabled = False
+        self.steer_assist_enabled = False
+        self.target_yaw = 0.0
+        self.was_driving_straight = False
+        
         # IMU Yaw tracking
         self.yaw = 0.0
         self.imu_sensor = None
@@ -242,6 +248,9 @@ class RobotHardware:
             for i in range(samples_needed):
                 if self.stop_thread_event.is_set():
                     return
+                # Allow breaking immediately if calibration is skipped
+                if not self.is_calibrating:
+                    break
                 try:
                     gyro_data = self.imu_sensor.get_gyro_data()
                     bias_sum += gyro_data['z']
@@ -292,6 +301,19 @@ class RobotHardware:
                     self.yaw = (self.yaw + 180) % 360 - 180
             time.sleep(0.02) # 50Hz is perfect for integration
 
+    def skip_calibration(self):
+        """Instantly skips calibration and falls back to current bias."""
+        self.is_calibrating = False
+
+    def toggle_steer_correction(self):
+        """Toggles heading-hold steering correction."""
+        self.steer_correction_enabled = not self.steer_correction_enabled
+        self.was_driving_straight = False
+
+    def toggle_steer_assist(self):
+        """Toggles active steering assistance / damping."""
+        self.steer_assist_enabled = not self.steer_assist_enabled
+
     def adjust_trim(self, amount):
         """Adjusts the drift trim bias (clamps between -0.3 and 0.3)."""
         self.trim_bias = max(-0.3, min(0.3, self.trim_bias + amount))
@@ -316,19 +338,58 @@ class RobotHardware:
     def set_speeds(self, left_speed, right_speed):
         """
         Sets the speed for left and right motors.
-        Applies trim_bias to correct physical motor imbalances.
+        Applies Steer Assist, Correction, and Trim.
         Sends speeds to ESP8266 via Serial.
-        Values are floats clamped between -1.0 and +1.0.
         """
-        # Apply trim_bias (trim_bias > 0 reduces Right, trim_bias < 0 reduces Left)
         trimmed_left = left_speed
         trimmed_right = right_speed
         
-        if left_speed != 0.0 or right_speed != 0.0:
+        # Apply IMU-based steer corrections if not running in mock mode and sensor is available
+        is_moving = left_speed != 0.0 or right_speed != 0.0
+        is_straight = is_moving and (abs(left_speed - right_speed) < 0.01)
+        
+        if is_moving and self.imu_sensor:
+            try:
+                gyro_data = self.imu_sensor.get_gyro_data()
+                gyro_z = gyro_data['z'] - self.gyro_bias_z
+            except Exception:
+                gyro_z = 0.0
+                
+            # 1. Heading Hold Steer Correction
+            if self.steer_correction_enabled:
+                if is_straight:
+                    if not self.was_driving_straight:
+                        self.target_yaw = self.yaw
+                        self.was_driving_straight = True
+                    
+                    error = (self.target_yaw - self.yaw + 180) % 360 - 180
+                    kp = 0.015
+                    correction = error * kp
+                    if left_speed < 0:
+                        correction = -correction
+                        
+                    trimmed_left += correction
+                    trimmed_right -= correction
+                else:
+                    self.was_driving_straight = False
+            else:
+                self.was_driving_straight = False
+                
+            # 2. Active Steering Damping Assist
+            if self.steer_assist_enabled:
+                kd = 0.003
+                damping = gyro_z * kd
+                trimmed_left -= damping
+                trimmed_right += damping
+        else:
+            self.was_driving_straight = False
+
+        # Apply trim_bias (trim_bias > 0 reduces Right, trim_bias < 0 reduces Left)
+        if trimmed_left != 0.0 or trimmed_right != 0.0:
             if self.trim_bias > 0.0:
-                trimmed_right = right_speed * (1.0 - self.trim_bias)
+                trimmed_right = trimmed_right * (1.0 - self.trim_bias)
             elif self.trim_bias < 0.0:
-                trimmed_left = left_speed * (1.0 + self.trim_bias)
+                trimmed_left = trimmed_left * (1.0 + self.trim_bias)
                 
         self.left_speed = max(-1.0, min(1.0, float(trimmed_left)))
         self.right_speed = max(-1.0, min(1.0, float(trimmed_right)))
