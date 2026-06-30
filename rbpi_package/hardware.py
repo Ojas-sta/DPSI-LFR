@@ -2,6 +2,12 @@ import time
 import atexit
 import threading
 
+try:
+    from mpu6050 import mpu6050
+    has_mpu = True
+except ImportError:
+    has_mpu = False
+
 class RobotHardware:
     def __init__(self, left_pin=17, right_pin=27):
         """
@@ -25,6 +31,37 @@ class RobotHardware:
         self.right_speed = 0.0
         self.last_ping_time = 0.0
         self.last_pong_time = 0.0
+        
+        # Drift trim bias (clamped between -0.3 and 0.3)
+        # trim_bias > 0: reduces Right wheel (corrects drift to Left)
+        # trim_bias < 0: reduces Left wheel (corrects drift to Right)
+        self.trim_bias = 0.0
+        
+        # IMU Yaw tracking
+        self.yaw = 0.0
+        self.imu_sensor = None
+        self.gyro_bias_z = 0.0
+        self.last_imu_time = time.time()
+        
+        if has_mpu:
+            try:
+                self.imu_sensor = mpu6050(0x68)
+                print("[IMU] Calibrating gyro bias (keep robot still)...")
+                # Calibrate by averaging 100 samples
+                bias_sum = 0.0
+                for _ in range(100):
+                    try:
+                        gyro_data = self.imu_sensor.get_gyro_data()
+                        bias_sum += gyro_data['z']
+                    except Exception:
+                        pass
+                    time.sleep(0.005)
+                self.gyro_bias_z = bias_sum / 100.0
+                print(f"[IMU] Gyro calibration complete. Bias Z: {self.gyro_bias_z:.4f}")
+            except Exception as e:
+                print(f"[IMU] Failed to initialize MPU6050: {e}")
+                self.imu_sensor = None
+
         
         self.stop_thread_event = threading.Event()
         
@@ -67,11 +104,43 @@ class RobotHardware:
             self.reader_thread.start()
 
     def run_serial_reader(self):
-        """Background thread loop to send ping heartbeats and read incoming serial lines safely."""
+        """Background thread loop to send ping heartbeats, read incoming serial lines, and integrate IMU Yaw."""
         mock_telemetry_timer = 0.0
         last_motor_send_time = 0.0
+        self.last_imu_time = time.time()
+        
         while not self.stop_thread_event.is_set():
             current_time = time.time()
+            
+            # Integrate IMU Yaw
+            if self.imu_sensor:
+                try:
+                    gyro_data = self.imu_sensor.get_gyro_data()
+                    dt = current_time - self.last_imu_time
+                    self.last_imu_time = current_time
+                    
+                    # Subtract calibrated bias
+                    gyro_z = gyro_data['z'] - self.gyro_bias_z
+                    
+                    # Apply small deadzone (e.g. 0.25 deg/s) to reduce drift when stationary
+                    if abs(gyro_z) > 0.25:
+                        # Gyro Z points up, counter-clockwise rotation is positive.
+                        # Yaw increases when turning Left (counter-clockwise).
+                        self.yaw += gyro_z * dt
+                        
+                    # Normalize yaw to -180 to +180 range
+                    self.yaw = (self.yaw + 180) % 360 - 180
+                except Exception:
+                    pass
+            else:
+                self.last_imu_time = current_time
+                # Simulate a slowly rotating yaw in mock mode if driving
+                if self.is_mock and (abs(self.left_speed) > 0.1 or abs(self.right_speed) > 0.1):
+                    # Compute turning factor
+                    turn_diff = self.right_speed - self.left_speed
+                    self.yaw += turn_diff * 40.0 * (current_time - self.last_imu_time)
+                    self.yaw = (self.yaw + 180) % 360 - 180
+
             
             # 1. Send continuous Motor commands (M:) every 200ms to feed ESP Watchdog
             if current_time - last_motor_send_time >= 0.2:
@@ -173,14 +242,47 @@ class RobotHardware:
             except Exception as e:
                 print(f"[Hardware] Failed to connect to {port_name}: {e}. Running in Mock mode.")
 
+    def adjust_trim(self, amount):
+        """Adjusts the drift trim bias (clamps between -0.3 and 0.3)."""
+        self.trim_bias = max(-0.3, min(0.3, self.trim_bias + amount))
+
+    def reset_yaw(self):
+        """Resets the integrated yaw angle to zero and re-calibrates bias."""
+        self.yaw = 0.0
+        if self.imu_sensor:
+            try:
+                bias_sum = 0.0
+                for _ in range(50):
+                    try:
+                        gyro_data = self.imu_sensor.get_gyro_data()
+                        bias_sum += gyro_data['z']
+                    except Exception:
+                        pass
+                    time.sleep(0.005)
+                self.gyro_bias_z = bias_sum / 50.0
+            except Exception:
+                pass
+
     def set_speeds(self, left_speed, right_speed):
         """
         Sets the speed for left and right motors.
+        Applies trim_bias to correct physical motor imbalances.
         Sends speeds to ESP8266 via Serial.
         Values are floats clamped between -1.0 and +1.0.
         """
-        self.left_speed = max(-1.0, min(1.0, float(left_speed)))
-        self.right_speed = max(-1.0, min(1.0, float(right_speed)))
+        # Apply trim_bias (trim_bias > 0 reduces Right, trim_bias < 0 reduces Left)
+        trimmed_left = left_speed
+        trimmed_right = right_speed
+        
+        if left_speed != 0.0 or right_speed != 0.0:
+            if self.trim_bias > 0.0:
+                trimmed_right = right_speed * (1.0 - self.trim_bias)
+            elif self.trim_bias < 0.0:
+                trimmed_left = left_speed * (1.0 + self.trim_bias)
+                
+        self.left_speed = max(-1.0, min(1.0, float(trimmed_left)))
+        self.right_speed = max(-1.0, min(1.0, float(trimmed_right)))
+
         
         cmd = f"M:{self.right_speed:.4f},{self.left_speed:.4f}\n"
         

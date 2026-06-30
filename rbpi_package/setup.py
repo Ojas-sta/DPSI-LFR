@@ -8,7 +8,9 @@ setup(
         'pyserial',
         'gpiozero',
         'opencv-python',
-        'numpy'
+        'numpy',
+        'mpu6050-raspberrypi',
+        'smbus2'
     ],
     entry_points={
         'console_scripts': [

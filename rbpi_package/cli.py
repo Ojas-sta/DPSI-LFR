@@ -20,6 +20,34 @@ def load_ascii_art():
             pass
     return []
 
+def draw_compass(stdscr, y, x, yaw, color_blue, color_purple):
+    """Renders a beautiful dynamic 8-way compass based on the IMU yaw heading."""
+    try:
+        # Normalize yaw to 0-360 degrees
+        angle = yaw
+        if angle < 0:
+            angle += 360
+            
+        dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+        dir_idx = int(((angle + 22.5) % 360) / 45)
+        cardinal = dirs[dir_idx]
+        
+        # Arrows pointing to heading
+        pointers = [" ↑ ", " ↗ ", " → ", " ↘ ", " ↓ ", " ↙ ", " ← ", " ↖ "]
+        ptr_char = pointers[dir_idx]
+        
+        stdscr.addstr(y,     x, "    N    ", color_blue)
+        stdscr.addstr(y + 1, x, " NW | NE ", color_purple)
+        stdscr.addstr(y + 2, x, f"W -{ptr_char}- E", color_purple | curses.A_BOLD)
+        stdscr.addstr(y + 3, x, " SW | SE ", color_purple)
+        stdscr.addstr(y + 4, x, "    S    ", color_blue)
+        
+        # Display raw heading below the compass disc
+        stdscr.addstr(y + 5, x - 2, f" Heading: {yaw:+.1f}° ", color_blue | curses.A_REVERSE | curses.A_BOLD)
+    except Exception:
+        pass
+
+
 def draw_box(stdscr, y, x, height, width, title="", color_pair=0):
     """Draws a themed bordered box in curses with an optional title."""
     try:
@@ -109,7 +137,10 @@ def check_for_updates(stdscr):
             
             stdscr.addstr(5, 2, "Installing updated dependencies...", curses.color_pair(2) | curses.A_BOLD)
             stdscr.refresh()
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "-e", "."], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            try:
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "-e", ".", "--break-system-packages"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "-e", "."], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
             stdscr.addstr(7, 2, "Update complete! Press any key to restart.", curses.color_pair(3) | curses.A_BOLD)
             stdscr.refresh()
@@ -211,9 +242,8 @@ def run_tui(stdscr):
                 pass
             y_ptr += 2
 
-        # 2. RENDER LAYOUT
         # Check if we should use side-by-side or stacked layout
-        is_side_by_side = (max_x >= 96)
+        is_side_by_side = (max_x >= 110)
         
         if is_side_by_side:
             # --- SIDE-BY-SIDE LAYOUT ---
@@ -236,44 +266,57 @@ def run_tui(stdscr):
             bar = "█" * cap_val + "░" * (10 - cap_val)
             stdscr.addstr(y_ptr + 2, left_x, f"Speed Cap: {speed_cap*100:3.0f}%  [{bar}]", curses.color_pair(2) | curses.A_BOLD)
             
+            # Trim Bias Slider (Range -0.3 to 0.3 mapped to 13 chars)
+            trim_val = int(robot.trim_bias * 20) # scale to -6 to +6
+            slider_idx = 6 + trim_val
+            bar_chars = ["-"] * 13
+            bar_chars[6] = "|"
+            bar_chars[max(0, min(12, slider_idx))] = "*"
+            bar_str = "".join(bar_chars)
+            stdscr.addstr(y_ptr + 3, left_x, f"Trim Bias: {robot.trim_bias:+.2f}  [L < {bar_str} > R]", curses.color_pair(2) | curses.A_BOLD)
+            
             # Mode & Arm states
             m_color = curses.color_pair(3) if mode == "AUTO" else curses.color_pair(2)
             a_color = curses.color_pair(3) if armed else curses.color_pair(4)
-            stdscr.addstr(y_ptr + 3, left_x, f"Mode: {mode}", m_color | curses.A_BOLD)
-            stdscr.addstr(y_ptr + 3, left_x + 20, f"Status: {'ARMED' if armed else 'DISARMED'}", a_color | curses.A_BOLD)
+            stdscr.addstr(y_ptr + 4, left_x, f"Mode: {mode}", m_color | curses.A_BOLD)
+            stdscr.addstr(y_ptr + 4, left_x + 20, f"Status: {'ARMED' if armed else 'DISARMED'}", a_color | curses.A_BOLD)
             
             # LED & Buzzer status
             led_str = "[ ON ]" if led_enabled else "[ OFF ]"
             buz_str = "[ ON ]" if buzzer_enabled else "[ OFF ]"
             led_col = curses.color_pair(3) if led_enabled else curses.color_pair(4)
             buz_col = curses.color_pair(3) if buzzer_enabled else curses.color_pair(4)
-            stdscr.addstr(y_ptr + 4, left_x, "LEDs:   ", curses.color_pair(6))
-            stdscr.addstr(y_ptr + 4, left_x + 8, led_str, led_col | curses.A_BOLD)
-            stdscr.addstr(y_ptr + 4, left_x + 18, "Buzzer: ", curses.color_pair(6))
-            stdscr.addstr(y_ptr + 4, left_x + 26, buz_str, buz_col | curses.A_BOLD)
+            stdscr.addstr(y_ptr + 5, left_x, "LEDs:   ", curses.color_pair(6))
+            stdscr.addstr(y_ptr + 5, left_x + 8, led_str, led_col | curses.A_BOLD)
+            stdscr.addstr(y_ptr + 5, left_x + 18, "Buzzer: ", curses.color_pair(6))
+            stdscr.addstr(y_ptr + 5, left_x + 26, buz_str, buz_col | curses.A_BOLD)
             
             # Draw ASCII Chassis Diagram
-            chassis_y = y_ptr + 6
+            chassis_y = y_ptr + 7
             draw_chassis(stdscr, chassis_y, left_x, robot.left_speed, robot.right_speed, 
                          curses.color_pair(1), curses.color_pair(2), curses.color_pair(3), curses.color_pair(4))
+            
+            # Draw dynamic IMU Compass right next to the Chassis
+            draw_compass(stdscr, chassis_y, left_x + 47, robot.yaw, curses.color_pair(1), curses.color_pair(2))
             
             # Draw Keyboard Controls Guide
             help_y = chassis_y + 8
             stdscr.addstr(help_y, left_x, "Controls Guide:", curses.color_pair(1) | curses.A_BOLD | curses.A_UNDERLINE)
             stdscr.addstr(help_y + 1, left_x, "[E] Arm           [Q] Disarm         [Space] ESTOP", curses.color_pair(6))
-            stdscr.addstr(help_y + 2, left_x, "[M] Toggle Auto/Manual Mode", curses.color_pair(6))
+            stdscr.addstr(help_y + 2, left_x, "[M] Toggle Auto/Manual Mode          [/] Reset Yaw", curses.color_pair(6))
             stdscr.addstr(help_y + 3, left_x, "[W,S] Drive Fwd/Rev   [A,D] Turn L/R (Manual only)", curses.color_pair(6))
             stdscr.addstr(help_y + 4, left_x, "[ [ ] Dec Speed Cap   [ ] ] Inc Speed Cap", curses.color_pair(6))
-            stdscr.addstr(help_y + 5, left_x, "[L] Toggle LEDs       [B] Toggle Buzzer", curses.color_pair(6))
-            stdscr.addstr(help_y + 6, left_x, "[P] Switch Serial Port   [X] Exit CLI", curses.color_pair(6))
+            stdscr.addstr(help_y + 5, left_x, "[ , ] Trim Left       [ . ] Trim Right", curses.color_pair(6))
+            stdscr.addstr(help_y + 6, left_x, "[L] Toggle LEDs       [B] Toggle Buzzer", curses.color_pair(6))
+            stdscr.addstr(help_y + 7, left_x, "[P] Switch Serial Port   [X] Exit CLI", curses.color_pair(6))
             
             # Display recent System Log
-            stdscr.addstr(help_y + 8, left_x, f"System Log: {status_msg}", curses.color_pair(2) | curses.A_BOLD)
+            stdscr.addstr(help_y + 9, left_x, f"System Log: {status_msg}", curses.color_pair(2) | curses.A_BOLD)
             
             # --- Serial Monitor Bordered Box ---
-            mon_x = 50
+            mon_x = 65
             mon_w = max_x - mon_x - 2
-            mon_h = (help_y + 9) - y_ptr
+            mon_h = (help_y + 10) - y_ptr
             
             draw_box(stdscr, y_ptr, mon_x, mon_h, mon_w, "Serial Telemetry Monitor (Last 10 lines)", curses.color_pair(1))
             
@@ -305,18 +348,34 @@ def run_tui(stdscr):
             bar = "█" * cap_val + "░" * (10 - cap_val)
             stdscr.addstr(y_ptr + 2, left_x, f"Speed Cap: {speed_cap*100:3.0f}%  [{bar}]", curses.color_pair(2) | curses.A_BOLD)
             
+            # Trim Bias Slider
+            trim_val = int(robot.trim_bias * 20)
+            slider_idx = 6 + trim_val
+            bar_chars = ["-"] * 13
+            bar_chars[6] = "|"
+            bar_chars[max(0, min(12, slider_idx))] = "*"
+            bar_str = "".join(bar_chars)
+            stdscr.addstr(y_ptr + 3, left_x, f"Trim Bias: {robot.trim_bias:+.2f}  [L < {bar_str} > R]", curses.color_pair(2) | curses.A_BOLD)
+            
             m_color = curses.color_pair(3) if mode == "AUTO" else curses.color_pair(2)
             a_color = curses.color_pair(3) if armed else curses.color_pair(4)
-            stdscr.addstr(y_ptr + 3, left_x, f"Mode: {mode}", m_color | curses.A_BOLD)
-            stdscr.addstr(y_ptr + 3, left_x + 20, f"Status: {'ARMED' if armed else 'DISARMED'}", a_color | curses.A_BOLD)
+            stdscr.addstr(y_ptr + 4, left_x, f"Mode: {mode}", m_color | curses.A_BOLD)
+            stdscr.addstr(y_ptr + 4, left_x + 20, f"Status: {'ARMED' if armed else 'DISARMED'}", a_color | curses.A_BOLD)
             
-            # Chassis (Row y_ptr + 5)
-            chassis_y = y_ptr + 5
+            # Chassis (Row y_ptr + 6)
+            chassis_y = y_ptr + 6
             draw_chassis(stdscr, chassis_y, left_x, robot.left_speed, robot.right_speed, 
                          curses.color_pair(1), curses.color_pair(2), curses.color_pair(3), curses.color_pair(4))
             
-            # Serial Telemetry Box below Chassis
-            mon_y = chassis_y + 8
+            # Compass next to it if screen is wide enough, else stack it below
+            if max_x >= 70:
+                draw_compass(stdscr, chassis_y, left_x + 47, robot.yaw, curses.color_pair(1), curses.color_pair(2))
+                mon_y = chassis_y + 8
+            else:
+                draw_compass(stdscr, chassis_y + 7, left_x + 15, robot.yaw, curses.color_pair(1), curses.color_pair(2))
+                mon_y = chassis_y + 15
+            
+            # Serial Telemetry Box below Chassis/Compass
             mon_h = max_y - mon_y - 2
             
             if mon_h > 4:
@@ -337,7 +396,7 @@ def run_tui(stdscr):
             
             # Draw compact control guide line at the bottom
             if max_y > 2:
-                help_msg = "[E] Arm [Q] Disarm [Space] Stop [M] Mode [L/B] LED/Buzzer [[,]] Cap [P] Port [X] Exit"
+                help_msg = "[E] Arm [Q] Disarm [Space] Stop [,] Trim L [.] Trim R [/] Reset Yaw [X] Exit"
                 try:
                     stdscr.addstr(max_y - 1, left_x, help_msg[:max_x - 4], curses.color_pair(1) | curses.A_BOLD)
                 except Exception:
@@ -394,6 +453,20 @@ def run_tui(stdscr):
             elif c == ord(']'):
                 speed_cap = min(1.0, speed_cap + 0.1)
                 status_msg = f"Speed Cap set to {speed_cap*100:.0f}%"
+                
+            # Drift Trim Bias Adjustments
+            elif c == ord(','):
+                robot.adjust_trim(-0.01)
+                status_msg = f"Trim Bias shifted Left: {robot.trim_bias:+.2f}"
+                
+            elif c == ord('.'):
+                robot.adjust_trim(0.01)
+                status_msg = f"Trim Bias shifted Right: {robot.trim_bias:+.2f}"
+                
+            # Yaw Reset
+            elif c == ord('/'):
+                robot.reset_yaw()
+                status_msg = "IMU Yaw reset to 0.0° and re-calibrated bias."
                 
             # LEDs Toggle Control
             elif c in (ord('l'), ord('L')):
