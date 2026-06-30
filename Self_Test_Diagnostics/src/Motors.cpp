@@ -31,12 +31,12 @@ void setLeftMotor(int speed) {
         digitalWrite(PIN_MOTOR_IN2, LOW);
         analogWrite(PIN_MOTOR_ENA, 0);
     } else if (speed > 0) {
-        digitalWrite(PIN_MOTOR_IN1, HIGH);
-        digitalWrite(PIN_MOTOR_IN2, LOW);
-        analogWrite(PIN_MOTOR_ENA, constrain(speed, 0, 255));
-    } else {
         digitalWrite(PIN_MOTOR_IN1, LOW);
         digitalWrite(PIN_MOTOR_IN2, HIGH);
+        analogWrite(PIN_MOTOR_ENA, constrain(speed, 0, 255));
+    } else {
+        digitalWrite(PIN_MOTOR_IN1, HIGH);
+        digitalWrite(PIN_MOTOR_IN2, LOW);
         analogWrite(PIN_MOTOR_ENA, constrain(-speed, 0, 255));
     }
 }
@@ -48,12 +48,12 @@ void setRightMotor(int speed) {
         digitalWrite(PIN_MOTOR_IN4, LOW);
         analogWrite(PIN_MOTOR_ENB, 0);
     } else if (speed > 0) {
-        digitalWrite(PIN_MOTOR_IN3, HIGH);
-        digitalWrite(PIN_MOTOR_IN4, LOW);
-        analogWrite(PIN_MOTOR_ENB, constrain(speed, 0, 255));
-    } else {
         digitalWrite(PIN_MOTOR_IN3, LOW);
         digitalWrite(PIN_MOTOR_IN4, HIGH);
+        analogWrite(PIN_MOTOR_ENB, constrain(speed, 0, 255));
+    } else {
+        digitalWrite(PIN_MOTOR_IN3, HIGH);
+        digitalWrite(PIN_MOTOR_IN4, LOW);
         analogWrite(PIN_MOTOR_ENB, constrain(-speed, 0, 255));
     }
 }

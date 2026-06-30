@@ -59,13 +59,8 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
                 <input type="range" id="slider-right" min="-255" max="255" value="0">
             </div>
             
-            <div class="btn-group">
-                <button class="btn-dir" onmousedown="drive(180, 180)" onmouseup="drive(0,0)" ontouchstart="drive(180, 180)" ontouchend="drive(0,0)">FWD</button>
-                <button class="btn-dir" onmousedown="drive(-180, -180)" onmouseup="drive(0,0)" ontouchstart="drive(-180, -180)" ontouchend="drive(0,0)">REV</button>
-            </div>
-            <div class="btn-group">
-                <button class="btn-dir" onmousedown="drive(-150, 150)" onmouseup="drive(0,0)" ontouchstart="drive(-150, 150)" ontouchend="drive(0,0)">LEFT</button>
-                <button class="btn-dir" onmousedown="drive(150, -150)" onmouseup="drive(0,0)" ontouchstart="drive(150, -150)" ontouchend="drive(0,0)">RIGHT</button>
+            <div id="joystick-zone" style="width: 200px; height: 200px; background: #333; border-radius: 50%; position: relative; margin: 20px auto; touch-action: none; box-shadow: inset 0 0 10px rgba(0,0,0,0.8);">
+                <div id="joystick-thumb" style="width: 60px; height: 60px; background: var(--accent); border-radius: 50%; position: absolute; top: 70px; left: 70px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.5);"></div>
             </div>
             <div class="btn-group">
                 <button class="btn-stop" onclick="drive(0,0)">EMERGENCY STOP (SPACE)</button>
@@ -157,6 +152,57 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
                 drive(0,0);
             }
         });
+
+        // Joystick
+        const zone = document.getElementById('joystick-zone');
+        const thumb = document.getElementById('joystick-thumb');
+        let jActive = false;
+        const maxR = 70;
+        let lastSend = 0;
+        
+        function jStart(e) { jActive = true; jMove(e); }
+        function jEnd(e) { 
+            jActive = false; 
+            thumb.style.transform = `translate(0px, 0px)`; 
+            drive(0, 0); 
+        }
+        function jMove(e) {
+            if (!jActive) return;
+            e.preventDefault();
+            let cx = e.clientX, cy = e.clientY;
+            if (e.touches && e.touches.length > 0) {
+                cx = e.touches[0].clientX; cy = e.touches[0].clientY;
+            }
+            const rect = zone.getBoundingClientRect();
+            let dx = cx - (rect.left + 100);
+            let dy = cy - (rect.top + 100);
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist > maxR) { dx = (dx/dist)*maxR; dy = (dy/dist)*maxR; }
+            thumb.style.transform = `translate(${dx}px, ${dy}px)`;
+            
+            let fwd = -dy / maxR;
+            let trn = dx / maxR;
+            let l = fwd + trn;
+            let r = fwd - trn;
+            let m = Math.max(Math.abs(l), Math.abs(r));
+            if (m > 1) { l /= m; r /= m; }
+            
+            let pwm_l = Math.round(l * 255);
+            let pwm_r = Math.round(r * 255);
+            
+            let now = Date.now();
+            if (now - lastSend > 50) {
+                drive(pwm_l, pwm_r);
+                lastSend = now;
+            }
+        }
+        
+        zone.addEventListener('mousedown', jStart);
+        document.addEventListener('mousemove', jMove);
+        document.addEventListener('mouseup', jEnd);
+        zone.addEventListener('touchstart', jStart, {passive: false});
+        document.addEventListener('touchmove', jMove, {passive: false});
+        document.addEventListener('touchend', jEnd);
 
         connect();
     </script>
