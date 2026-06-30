@@ -20,14 +20,18 @@
 #define PIN_IR_10   18  // Far Right
 
 // L298N Motor Driver - Left Motor
-#define PIN_MOTOR_ENA   11  // Left Speed PWM
+#define PIN_MOTOR_ENA   13  // Left Speed PWM
 #define PIN_MOTOR_IN1   12  // Left Direction A
-#define PIN_MOTOR_IN2   13  // Left Direction B
+#define PIN_MOTOR_IN2   11  // Left Direction B
 
 // L298N Motor Driver - Right Motor
-#define PIN_MOTOR_IN3   14  // Right Direction A
-#define PIN_MOTOR_IN4   21  // Right Direction B
-#define PIN_MOTOR_ENB   47  // Right Speed PWM
+#define PIN_MOTOR_IN3   10  // Right Direction A
+#define PIN_MOTOR_IN4   9   // Right Direction B
+#define PIN_MOTOR_ENB   46  // Right Speed PWM
+
+// Indicator LEDs (Rescue Arena Actions)
+#define PIN_LED_GREEN   41
+#define PIN_LED_RED     42
 
 // I2C Bus (Shared: SSD1306 OLED & MPU6050 IMU)
 #define PIN_I2C_SDA     38
@@ -107,6 +111,8 @@
 #define OPCODE_EXECUTE_TURN_180   0x03
 #define OPCODE_SET_PID_GAINS      0x04
 #define OPCODE_SET_MODE           0x05
+#define OPCODE_ACTION_GREEN_LED   0x06
+#define OPCODE_ACTION_RED_LED     0x07
 #define OPCODE_HEARTBEAT_PING     0x0A
 #define OPCODE_EMERGENCY_STOP     0xFF
 

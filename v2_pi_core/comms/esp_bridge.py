@@ -12,6 +12,8 @@ OPCODE_EXECUTE_TURN_90 = 0x02
 OPCODE_EXECUTE_TURN_180 = 0x03
 OPCODE_SET_PID_GAINS = 0x04
 OPCODE_SET_MODE = 0x05
+OPCODE_ACTION_GREEN_LED = 0x06
+OPCODE_ACTION_RED_LED = 0x07
 OPCODE_HEARTBEAT_PING = 0x0A
 OPCODE_EMERGENCY_STOP = 0xFF
 
@@ -208,6 +210,12 @@ class ESPBridge:
 
     def emergency_stop(self):
         self.send_packet(OPCODE_EMERGENCY_STOP)
+
+    def action_green_led(self):
+        self.send_packet(OPCODE_ACTION_GREEN_LED)
+
+    def action_red_led(self):
+        self.send_packet(OPCODE_ACTION_RED_LED)
 
     def read_telemetry(self) -> Dict[str, Any]:
         with self.lock:

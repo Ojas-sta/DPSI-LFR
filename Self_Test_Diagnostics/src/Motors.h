@@ -4,6 +4,8 @@
 void initMotors();
 void setLeftMotor(int speed);
 void setRightMotor(int speed);
-void resetWatchdog();
-void checkWatchdog();
+void checkMotorWatchdog();
+void feedMotorWatchdog();
 bool isWatchdogOk();
+int getLeftMotorPWM();
+int getRightMotorPWM();

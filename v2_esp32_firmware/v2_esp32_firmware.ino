@@ -30,6 +30,10 @@ uint8_t g_turn_target_direction = 0;
 float g_turn_target_angle = 0.0f;
 bool g_turn_in_progress = false;
 
+// LED states
+unsigned long g_green_led_timeout = 0;
+bool g_red_led_active = false;
+
 // ============================================================================
 // SETUP
 // ============================================================================
@@ -40,6 +44,11 @@ void setup() {
 
     g_imu_mutex = xSemaphoreCreateMutex();
     g_command_queue = xQueueCreate(10, sizeof(CommandPacket));
+
+    pinMode(PIN_LED_GREEN, OUTPUT);
+    pinMode(PIN_LED_RED, OUTPUT);
+    digitalWrite(PIN_LED_GREEN, LOW);
+    digitalWrite(PIN_LED_RED, LOW);
 
     Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL, I2C_FREQ_HZ);
     delay(100);
@@ -63,6 +72,7 @@ void setup() {
     xTaskCreatePinnedToCore(Task_LineFollow_PID, "LineFollow", 8192, NULL, 4, NULL, 1);
     xTaskCreatePinnedToCore(Task_Serial_Parser, "SerialParser", 4096, NULL, 3, NULL, 1);
     xTaskCreatePinnedToCore(Task_OLED_Display, "OLED", 3072, NULL, 1, NULL, 1);
+    xTaskCreatePinnedToCore(Task_LED_Control, "LEDs", 2048, NULL, 1, NULL, 1);
 
     Serial.println(F("DPSI-LFR V2 Ready"));
 }
@@ -204,7 +214,24 @@ void Task_Serial_Parser(void* pvParameters) {
                         g_system_mode = cmd_packet.payload[0];
                         if (g_system_mode == MODE_STANDBY) {
                             emergencyStopMotors();
+                        } else if (g_system_mode == MODE_LINE_FOLLOW) {
+                            g_red_led_active = false;
+                            g_green_led_timeout = 0;
                         }
+                        break;
+                    }
+
+                    case OPCODE_ACTION_GREEN_LED: {
+                        g_green_led_timeout = millis() + 3000;
+                        g_red_led_active = false;
+                        break;
+                    }
+
+                    case OPCODE_ACTION_RED_LED: {
+                        g_red_led_active = true;
+                        g_green_led_timeout = 0;
+                        g_system_mode = MODE_STANDBY;
+                        emergencyStopMotors();
                         break;
                     }
 
@@ -245,5 +272,29 @@ void Task_OLED_Display(void* pvParameters) {
         renderTelemetry(mode_str, ir_bitmask, yaw, 0, 0, 0);
 
         vTaskDelayUntil(&xLastWakeTime, xPeriod);
+    }
+}
+
+// ============================================================================
+// TASK: LED CONTROL
+// ============================================================================
+
+void Task_LED_Control(void* pvParameters) {
+    bool led_state = false;
+    while (true) {
+        if (millis() < g_green_led_timeout) {
+            digitalWrite(PIN_LED_GREEN, led_state ? HIGH : LOW);
+        } else {
+            digitalWrite(PIN_LED_GREEN, LOW);
+        }
+
+        if (g_red_led_active) {
+            digitalWrite(PIN_LED_RED, led_state ? HIGH : LOW);
+        } else {
+            digitalWrite(PIN_LED_RED, LOW);
+        }
+
+        led_state = !led_state;
+        vTaskDelay(pdMS_TO_TICKS(250));
     }
 }

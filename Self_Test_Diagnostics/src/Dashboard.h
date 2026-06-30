@@ -1,162 +1,187 @@
 #pragma once
 #include <Arduino.h>
 
-const char INDEX_HTML[] PROGMEM = R"rawliteral(
-<!DOCTYPE HTML><html>
+const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <title>ESP32-S3 Diagnostics</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    body { font-family: Arial; text-align: center; background-color: #121212; color: #fff; margin:0; padding: 20px;}
-    .card { background-color: #1e1e1e; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.3); }
-    .badge { padding: 5px 10px; border-radius: 4px; font-weight: bold; }
-    .connected { background-color: #28a745; }
-    .disconnected { background-color: #dc3545; }
-    .ir-bar { display: flex; justify-content: center; gap: 5px; margin: 20px 0; }
-    .ir-led { width: 30px; height: 30px; border-radius: 4px; background-color: #333; display: flex; align-items: center; justify-content: center; font-size: 10px; }
-    .ir-on { background-color: #00ffcc; color: #000; }
-    .d-pad { display: grid; grid-template-columns: 60px 60px 60px; grid-gap: 10px; justify-content: center; margin-bottom: 20px; }
-    .btn { padding: 15px; font-size: 18px; cursor: pointer; border: none; border-radius: 8px; background-color: #007bff; color: white; touch-action: manipulation; }
-    .btn:active { background-color: #0056b3; }
-    .btn-stop { background-color: #dc3545; }
-    .sliders { display: flex; justify-content: center; gap: 40px; margin-bottom: 20px; }
-    .slider-container { display: flex; flex-direction: column; align-items: center; }
-    #console { text-align: left; background: #000; color: #0f0; font-family: monospace; padding: 10px; height: 150px; overflow-y: auto; border-radius: 4px; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>ESP32-S3 Diagnostics</title>
+    <style>
+        :root { --bg: #121212; --panel: #1e1e1e; --text: #ffffff; --accent: #00e5ff; --danger: #ff1744; --success: #00e676; }
+        body { margin: 0; padding: 20px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); color: var(--text); }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--panel); padding-bottom: 10px; margin-bottom: 20px; }
+        .badge { padding: 5px 10px; border-radius: 20px; font-weight: bold; font-size: 0.9em; }
+        .badge.disconnected { background: var(--danger); }
+        .badge.connected { background: var(--success); color: black; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+        .card { background: var(--panel); padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        h2 { margin-top: 0; color: var(--accent); font-size: 1.2em; border-bottom: 1px solid #333; padding-bottom: 10px; }
+        
+        /* Motor Controls */
+        .slider-container { margin: 15px 0; }
+        .slider-container label { display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 5px; }
+        input[type=range] { width: 100%; height: 8px; background: #333; border-radius: 5px; outline: none; -webkit-appearance: none; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); cursor: pointer; }
+        .btn-group { display: flex; gap: 10px; margin-top: 15px; }
+        button { flex: 1; padding: 15px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; text-transform: uppercase; transition: opacity 0.2s; }
+        button:active { opacity: 0.7; }
+        .btn-stop { background: var(--danger); color: white; }
+        .btn-dir { background: #333; color: white; border: 1px solid #555; }
+        .btn-dir:active { background: var(--accent); color: black; }
+
+        /* IR Sensors */
+        .ir-bar { display: flex; gap: 5px; justify-content: space-between; margin-top: 20px; }
+        .ir-node { flex: 1; height: 40px; border-radius: 5px; background: #333; display: flex; align-items: center; justify-content: center; font-size: 0.8em; font-weight: bold; color: #777; transition: all 0.1s; border: 1px solid #222; }
+        .ir-node.active { background: var(--accent); color: black; box-shadow: 0 0 10px var(--accent); border-color: white; }
+        .ir-stats { margin-top: 15px; font-family: monospace; font-size: 1.1em; color: #aaa; text-align: center; }
+
+        /* Console */
+        .console { height: 200px; background: #000; padding: 10px; overflow-y: auto; font-family: monospace; font-size: 0.9em; border-radius: 5px; border: 1px solid #333; }
+        .log-msg { margin: 2px 0; }
+        .log-err { color: var(--danger); }
+        .log-sys { color: var(--accent); }
+    </style>
 </head>
 <body>
-  <h2>ESP32-S3 Hardware Diagnostics</h2>
-  <p>Status: <span id="ws-status" class="badge disconnected">Disconnected</span> | Uptime: <span id="uptime">0</span>s</p>
-
-  <div class="card">
-    <h3>10x IR Sensor Array</h3>
-    <div class="ir-bar" id="ir-container">
-      <!-- Generated via JS -->
-    </div>
-    <p>Raw Bitmask: <span id="ir-raw">0x000</span></p>
-  </div>
-
-  <div class="card">
-    <h3>Motor Control Panel</h3>
-    <div class="sliders">
-      <div class="slider-container">
-        <label>Left Speed: <span id="valL">0</span></label>
-        <input type="range" id="speedL" min="-255" max="255" value="0" oninput="updateSpeed()">
-      </div>
-      <div class="slider-container">
-        <label>Right Speed: <span id="valR">0</span></label>
-        <input type="range" id="speedR" min="-255" max="255" value="0" oninput="updateSpeed()">
-      </div>
+    <div class="header">
+        <h1>RC Post Controller Diagnostics</h1>
+        <div id="status-badge" class="badge disconnected">Disconnected</div>
     </div>
     
-    <div class="d-pad">
-      <div></div><button class="btn" onmousedown="drive(200, 200)" onmouseup="drive(0,0)" ontouchstart="drive(200, 200)" ontouchend="drive(0,0)">FWD</button><div></div>
-      <button class="btn" onmousedown="drive(-200, 200)" onmouseup="drive(0,0)" ontouchstart="drive(-200, 200)" ontouchend="drive(0,0)">L</button>
-      <button class="btn btn-stop" onclick="drive(0,0)">STOP</button>
-      <button class="btn" onmousedown="drive(200, -200)" onmouseup="drive(0,0)" ontouchstart="drive(200, -200)" ontouchend="drive(0,0)">R</button>
-      <div></div><button class="btn" onmousedown="drive(-200, -200)" onmouseup="drive(0,0)" ontouchstart="drive(-200, -200)" ontouchend="drive(0,0)">REV</button><div></div>
-    </div>
-    <p><i>Use WASD or arrow keys on keyboard.</i></p>
-  </div>
+    <div class="grid">
+        <div class="card">
+            <h2>Motor Control & PWM</h2>
+            <div class="slider-container">
+                <label><span>Left Motor (M1)</span> <span id="val-left">0</span></label>
+                <input type="range" id="slider-left" min="-255" max="255" value="0">
+            </div>
+            <div class="slider-container">
+                <label><span>Right Motor (M2)</span> <span id="val-right">0</span></label>
+                <input type="range" id="slider-right" min="-255" max="255" value="0">
+            </div>
+            
+            <div class="btn-group">
+                <button class="btn-dir" onmousedown="drive(180, 180)" onmouseup="drive(0,0)" ontouchstart="drive(180, 180)" ontouchend="drive(0,0)">FWD</button>
+                <button class="btn-dir" onmousedown="drive(-180, -180)" onmouseup="drive(0,0)" ontouchstart="drive(-180, -180)" ontouchend="drive(0,0)">REV</button>
+            </div>
+            <div class="btn-group">
+                <button class="btn-dir" onmousedown="drive(-150, 150)" onmouseup="drive(0,0)" ontouchstart="drive(-150, 150)" ontouchend="drive(0,0)">LEFT</button>
+                <button class="btn-dir" onmousedown="drive(150, -150)" onmouseup="drive(0,0)" ontouchstart="drive(150, -150)" ontouchend="drive(0,0)">RIGHT</button>
+            </div>
+            <div class="btn-group">
+                <button class="btn-stop" onclick="drive(0,0)">EMERGENCY STOP (SPACE)</button>
+            </div>
+        </div>
 
-  <div class="card">
-    <h3>Live Console</h3>
-    <div id="console"></div>
-  </div>
-
-  <script>
-    const irContainer = document.getElementById('ir-container');
-    for (let i = 0; i < 10; i++) {
-      const div = document.createElement('div');
-      div.className = 'ir-led';
-      div.id = 'ir' + i;
-      div.innerText = i + 1;
-      irContainer.appendChild(div);
-    }
-
-    var gateway = `ws://${window.location.hostname}/ws`;
-    var websocket;
-
-    function initWebSocket() {
-      websocket = new WebSocket(gateway);
-      websocket.onopen    = onOpen;
-      websocket.onclose   = onClose;
-      websocket.onmessage = onMessage;
-    }
-
-    function onOpen(event) {
-      document.getElementById('ws-status').className = 'badge connected';
-      document.getElementById('ws-status').innerText = 'Connected';
-      logConsole("WebSocket Connected");
-    }
-
-    function onClose(event) {
-      document.getElementById('ws-status').className = 'badge disconnected';
-      document.getElementById('ws-status').innerText = 'Disconnected';
-      logConsole("WebSocket Disconnected. Reconnecting...");
-      setTimeout(initWebSocket, 2000);
-    }
-
-    function onMessage(event) {
-      const data = JSON.parse(event.data);
-      if (data.type === "telemetry") {
-        document.getElementById('uptime').innerText = Math.floor(data.uptime_ms / 1000);
-        document.getElementById('ir-raw').innerText = "0x" + data.ir_raw.toString(16).toUpperCase();
+        <div class="card">
+            <h2>10-CH IR Reflectance Array</h2>
+            <div class="ir-bar" id="ir-container">
+                <div class="ir-node" id="ir-0">IR1</div>
+                <div class="ir-node" id="ir-1">IR2</div>
+                <div class="ir-node" id="ir-2">IR3</div>
+                <div class="ir-node" id="ir-3">IR4</div>
+                <div class="ir-node" id="ir-4">IR5</div>
+                <div class="ir-node" id="ir-5">IR6</div>
+                <div class="ir-node" id="ir-6">IR7</div>
+                <div class="ir-node" id="ir-7">IR8</div>
+                <div class="ir-node" id="ir-8">IR9</div>
+                <div class="ir-node" id="ir-9">IR10</div>
+            </div>
+            <div class="ir-stats">
+                Bitmask: <span id="ir-hex" style="color: white">0x000</span> | DEC: <span id="ir-dec" style="color: white">0</span>
+            </div>
+        </div>
         
-        for (let i = 0; i < 10; i++) {
-          const el = document.getElementById('ir' + i);
-          if (data.ir_bits[i]) el.classList.add('ir-on');
-          else el.classList.remove('ir-on');
+        <div class="card" style="grid-column: 1 / -1;">
+            <h2>Live Telemetry Console</h2>
+            <div class="console" id="console"></div>
+        </div>
+    </div>
+
+    <script>
+        let ws;
+        const badge = document.getElementById('status-badge');
+        const cons = document.getElementById('console');
+        const sliderL = document.getElementById('slider-left');
+        const sliderR = document.getElementById('slider-right');
+        const valL = document.getElementById('val-left');
+        const valR = document.getElementById('val-right');
+        
+        function log(msg, type='sys') {
+            const div = document.createElement('div');
+            div.className = 'log-msg log-' + type;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            cons.appendChild(div);
+            cons.scrollTop = cons.scrollHeight;
         }
 
-        if(!data.watchdog_ok) {
-           logConsole("WARNING: Watchdog Triggered!");
+        function connect() {
+            ws = new WebSocket('ws://' + window.location.hostname + '/ws');
+            ws.onopen = () => {
+                badge.className = 'badge connected';
+                badge.textContent = 'Connected';
+                log('WebSocket connected to ESP32-S3');
+            };
+            ws.onclose = () => {
+                badge.className = 'badge disconnected';
+                badge.textContent = 'Disconnected';
+                log('WebSocket disconnected. Reconnecting...', 'err');
+                setTimeout(connect, 2000);
+            };
+            ws.onmessage = (e) => {
+                const data = JSON.parse(e.data);
+                if (data.type === 'telemetry') {
+                    // Update IR
+                    document.getElementById('ir-hex').textContent = '0x' + data.ir_raw.toString(16).padStart(3, '0').toUpperCase();
+                    document.getElementById('ir-dec').textContent = data.ir_raw;
+                    for (let i = 0; i < 10; i++) {
+                        document.getElementById('ir-' + i).className = data.ir_bits[i] ? 'ir-node active' : 'ir-node';
+                    }
+                    if (!data.watchdog_ok) {
+                        log('WATCHDOG TIMEOUT / EMERGENCY BRAKE', 'err');
+                    }
+                }
+            };
         }
-      }
-    }
 
-    function logConsole(msg) {
-      const con = document.getElementById('console');
-      con.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>`;
-      con.scrollTop = con.scrollHeight;
-    }
+        function sendMotor(left, right) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({action: 'motor', left: left, right: right}));
+            }
+        }
 
-    function sendCommand(left, right) {
-      if (websocket && websocket.readyState === WebSocket.OPEN) {
-        websocket.send(JSON.stringify({action: "motor", left: left, right: right}));
-      }
-    }
+        function drive(left, right) {
+            sliderL.value = left;
+            sliderR.value = right;
+            valL.textContent = left;
+            valR.textContent = right;
+            sendMotor(left, right);
+        }
 
-    function updateSpeed() {
-      const l = parseInt(document.getElementById('speedL').value);
-      const r = parseInt(document.getElementById('speedR').value);
-      document.getElementById('valL').innerText = l;
-      document.getElementById('valR').innerText = r;
-      sendCommand(l, r);
-    }
+        // Sliders
+        sliderL.oninput = () => { valL.textContent = sliderL.value; sendMotor(parseInt(sliderL.value), parseInt(sliderR.value)); };
+        sliderR.oninput = () => { valR.textContent = sliderR.value; sendMotor(parseInt(sliderL.value), parseInt(sliderR.value)); };
 
-    function drive(l, r) {
-      document.getElementById('speedL').value = l;
-      document.getElementById('speedR').value = r;
-      updateSpeed();
-    }
+        // Keyboard support
+        window.addEventListener('keydown', (e) => {
+            if (e.repeat) return;
+            if (e.code === 'ArrowUp' || e.code === 'KeyW') drive(180, 180);
+            if (e.code === 'ArrowDown' || e.code === 'KeyS') drive(-180, -180);
+            if (e.code === 'ArrowLeft' || e.code === 'KeyA') drive(-150, 150);
+            if (e.code === 'ArrowRight' || e.code === 'KeyD') drive(150, -150);
+            if (e.code === 'Space') drive(0, 0);
+        });
+        window.addEventListener('keyup', (e) => {
+            if (['ArrowUp','KeyW','ArrowDown','KeyS','ArrowLeft','KeyA','ArrowRight','KeyD'].includes(e.code)) {
+                drive(0,0);
+            }
+        });
 
-    // Keyboard support
-    document.addEventListener('keydown', (e) => {
-      if(e.repeat) return;
-      if(e.key === 'w' || e.key === 'ArrowUp') drive(200, 200);
-      else if(e.key === 's' || e.key === 'ArrowDown') drive(-200, -200);
-      else if(e.key === 'a' || e.key === 'ArrowLeft') drive(-200, 200);
-      else if(e.key === 'd' || e.key === 'ArrowRight') drive(200, -200);
-      else if(e.key === ' ') drive(0,0);
-    });
-    
-    document.addEventListener('keyup', (e) => {
-      if(['w','s','a','d','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) drive(0,0);
-    });
-
-    window.onload = initWebSocket;
-  </script>
+        connect();
+    </script>
 </body>
 </html>
 )rawliteral";

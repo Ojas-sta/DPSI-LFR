@@ -1,81 +1,79 @@
 #include "Motors.h"
 #include "Config.h"
 
-static unsigned long last_motor_command_time = 0;
-static bool watchdog_ok = true;
+unsigned long g_last_motor_command_time = 0;
+bool g_watchdog_ok = true;
+int g_left_pwm = 0;
+int g_right_pwm = 0;
 
 void initMotors() {
-    pinMode(PIN_MOTOR_L_IN1, OUTPUT);
-    pinMode(PIN_MOTOR_L_IN2, OUTPUT);
-    pinMode(PIN_MOTOR_R_IN3, OUTPUT);
-    pinMode(PIN_MOTOR_R_IN4, OUTPUT);
+    pinMode(PIN_MOTOR_IN1, OUTPUT);
+    pinMode(PIN_MOTOR_IN2, OUTPUT);
+    pinMode(PIN_MOTOR_IN3, OUTPUT);
+    pinMode(PIN_MOTOR_IN4, OUTPUT);
 
-    // ESP32 Arduino Core v2 LEDC setup
-    ledcSetup(PWM_CHANNEL_L, PWM_FREQ, PWM_RES);
-    ledcAttachPin(PIN_MOTOR_L_ENA, PWM_CHANNEL_L);
+    // Setup LEDC PWM Channels
+    ledcSetup(LEDC_CH_LEFT, PWM_FREQ, PWM_RESOLUTION);
+    ledcAttachPin(PIN_MOTOR_ENA, LEDC_CH_LEFT);
     
-    ledcSetup(PWM_CHANNEL_R, PWM_FREQ, PWM_RES);
-    ledcAttachPin(PIN_MOTOR_R_ENB, PWM_CHANNEL_R);
+    ledcSetup(LEDC_CH_RIGHT, PWM_FREQ, PWM_RESOLUTION);
+    ledcAttachPin(PIN_MOTOR_ENB, LEDC_CH_RIGHT);
 
     setLeftMotor(0);
     setRightMotor(0);
+    feedMotorWatchdog();
 }
 
 void setLeftMotor(int speed) {
-    if (speed > 255) speed = 255;
-    if (speed < -255) speed = -255;
-
-    if (speed > 0) {
-        digitalWrite(PIN_MOTOR_L_IN1, HIGH);
-        digitalWrite(PIN_MOTOR_L_IN2, LOW);
-        ledcWrite(PWM_CHANNEL_L, speed);
-    } else if (speed < 0) {
-        digitalWrite(PIN_MOTOR_L_IN1, LOW);
-        digitalWrite(PIN_MOTOR_L_IN2, HIGH);
-        ledcWrite(PWM_CHANNEL_L, -speed);
+    g_left_pwm = speed;
+    if (speed == 0) {
+        digitalWrite(PIN_MOTOR_IN1, LOW);
+        digitalWrite(PIN_MOTOR_IN2, LOW);
+        ledcWrite(LEDC_CH_LEFT, 0);
+    } else if (speed > 0) {
+        digitalWrite(PIN_MOTOR_IN1, HIGH);
+        digitalWrite(PIN_MOTOR_IN2, LOW);
+        ledcWrite(LEDC_CH_LEFT, constrain(speed, 0, 255));
     } else {
-        digitalWrite(PIN_MOTOR_L_IN1, LOW);
-        digitalWrite(PIN_MOTOR_L_IN2, LOW);
-        ledcWrite(PWM_CHANNEL_L, 0);
+        digitalWrite(PIN_MOTOR_IN1, LOW);
+        digitalWrite(PIN_MOTOR_IN2, HIGH);
+        ledcWrite(LEDC_CH_LEFT, constrain(-speed, 0, 255));
     }
 }
 
 void setRightMotor(int speed) {
-    if (speed > 255) speed = 255;
-    if (speed < -255) speed = -255;
-
-    if (speed > 0) {
-        digitalWrite(PIN_MOTOR_R_IN3, HIGH);
-        digitalWrite(PIN_MOTOR_R_IN4, LOW);
-        ledcWrite(PWM_CHANNEL_R, speed);
-    } else if (speed < 0) {
-        digitalWrite(PIN_MOTOR_R_IN3, LOW);
-        digitalWrite(PIN_MOTOR_R_IN4, HIGH);
-        ledcWrite(PWM_CHANNEL_R, -speed);
+    g_right_pwm = speed;
+    if (speed == 0) {
+        digitalWrite(PIN_MOTOR_IN3, LOW);
+        digitalWrite(PIN_MOTOR_IN4, LOW);
+        ledcWrite(LEDC_CH_RIGHT, 0);
+    } else if (speed > 0) {
+        digitalWrite(PIN_MOTOR_IN3, HIGH);
+        digitalWrite(PIN_MOTOR_IN4, LOW);
+        ledcWrite(LEDC_CH_RIGHT, constrain(speed, 0, 255));
     } else {
-        digitalWrite(PIN_MOTOR_R_IN3, LOW);
-        digitalWrite(PIN_MOTOR_R_IN4, LOW);
-        ledcWrite(PWM_CHANNEL_R, 0);
+        digitalWrite(PIN_MOTOR_IN3, LOW);
+        digitalWrite(PIN_MOTOR_IN4, HIGH);
+        ledcWrite(LEDC_CH_RIGHT, constrain(-speed, 0, 255));
     }
 }
 
-void resetWatchdog() {
-    last_motor_command_time = millis();
-    if (!watchdog_ok) {
-        Serial.println("[WATCHDOG] Connection restored. Watchdog OK.");
-        watchdog_ok = true;
+void feedMotorWatchdog() {
+    g_last_motor_command_time = millis();
+    g_watchdog_ok = true;
+}
+
+void checkMotorWatchdog() {
+    if (millis() - g_last_motor_command_time > WATCHDOG_TIMEOUT_MS) {
+        if (g_watchdog_ok) {
+            Serial.println("[WATCHDOG] Timeout! Emergency stopping motors.");
+            setLeftMotor(0);
+            setRightMotor(0);
+            g_watchdog_ok = false;
+        }
     }
 }
 
-void checkWatchdog() {
-    if (watchdog_ok && (millis() - last_motor_command_time > WATCHDOG_TIMEOUT_MS)) {
-        Serial.println("[WATCHDOG] TIMEOUT! Emergency Stop!");
-        setLeftMotor(0);
-        setRightMotor(0);
-        watchdog_ok = false;
-    }
-}
-
-bool isWatchdogOk() {
-    return watchdog_ok;
-}
+bool isWatchdogOk() { return g_watchdog_ok; }
+int getLeftMotorPWM() { return g_left_pwm; }
+int getRightMotorPWM() { return g_right_pwm; }

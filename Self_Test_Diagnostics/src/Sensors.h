@@ -2,5 +2,5 @@
 #include <Arduino.h>
 
 void initSensors();
-uint16_t getIRRaw();
-void getIRBits(uint8_t* bitsArray);
+uint16_t readIRSensorBitmask();
+void getIRSensorArray(uint8_t* outArray);

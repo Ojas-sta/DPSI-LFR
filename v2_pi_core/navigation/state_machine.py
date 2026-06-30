@@ -3,6 +3,7 @@ from typing import Optional
 from comms.esp_bridge import ESPBridge
 from vision.camera_warp import PerspectiveWarper
 from vision.green_dot import GreenDotDetector
+from vision.red_dot import RedDotDetector
 import numpy as np
 
 # ============================================================================
@@ -24,7 +25,7 @@ MODE_MANUAL = 2
 
 class NavigationMaster:
     def __init__(self, esp_bridge: ESPBridge, warper: PerspectiveWarper,
-                 green_detector: GreenDotDetector):
+                 green_detector: GreenDotDetector, red_detector: RedDotDetector = None):
         """
         Initialize navigation FSM controller.
 
@@ -36,6 +37,7 @@ class NavigationMaster:
         self.esp = esp_bridge
         self.warper = warper
         self.green_detector = green_detector
+        self.red_detector = red_detector if red_detector else RedDotDetector()
 
         self.state = STATE_LINE_FOLLOWING
         self.last_heartbeat = time.time()
@@ -43,6 +45,9 @@ class NavigationMaster:
 
         self.turn_issued = False
         self.turn_start_time = 0.0
+
+        self.last_green_led_time = 0.0
+        self.last_red_led_time = 0.0
 
     def start(self):
         """Start navigation by enabling line following mode."""
@@ -68,9 +73,19 @@ class NavigationMaster:
             self.last_heartbeat = time.time()
 
         warped = self.warper.warp(frame)
-        dots = self.green_detector.detect_dots(warped)
-
+        
         if self.state == STATE_LINE_FOLLOWING:
+            # 1. Check for Red Dot (Highest Priority)
+            if self.red_detector.detect_dot(warped):
+                if time.time() - self.last_red_led_time > 2.0:
+                    print("RED DOT DETECTED! Stopping and blinking red LED.")
+                    self.esp.action_red_led()
+                    self.last_red_led_time = time.time()
+                    self.stop()
+                return
+
+            # 2. Check for Green Dot
+            dots = self.green_detector.detect_dots(warped)
             self._handle_line_following(dots)
 
         elif self.state == STATE_INTERSECTION_DECISION:
@@ -79,6 +94,11 @@ class NavigationMaster:
     def _handle_line_following(self, dots):
         """Handle line following state logic."""
         if len(dots) > 0:
+            if time.time() - self.last_green_led_time > 2.0:
+                print("GREEN DOT DETECTED! Blinking green LED.")
+                self.esp.action_green_led()
+                self.last_green_led_time = time.time()
+
             decision = self.green_detector.evaluate_intersection(dots, None)
 
             if decision != "NONE":

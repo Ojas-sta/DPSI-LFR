@@ -42,7 +42,13 @@ You must strictly adhere to the physical GPIO assignments and hardware parameter
 | IR 9 | Right 2 | `GPIO 17` | `INPUT` / Digital Read | `Bit 8` (0x100) |
 | IR 10 | Far Right | `GPIO 18` | `INPUT` / Digital Read | `Bit 9` (0x200) |
 
-### 2.3 Additional Hardware & Timing Parameters
+### 2.3 I2C OLED Display (SSD1306)
+| Signal Name | ESP32-S3 GPIO Pin | Configuration |
+|---|---|---|
+| I2C SDA | `GPIO 38` | Wire Data |
+| I2C SCL | `GPIO 39` | Wire Clock |
+
+### 2.4 Additional Hardware & Timing Parameters
 - **Serial Console**: Baud Rate `115200` baud on USB Serial.
 - **Motor Safety Watchdog Timeout**: `500 ms` (Automatic emergency motor shutdown if no control packet is received).
 - **Telemetry Update Rate**: `20 Hz` (Every `50 ms`).
@@ -105,6 +111,14 @@ You must generate firmware implementing the following five core subsystems:
 - Read all 10 GPIO pins during each 20Hz telemetry cycle using non-blocking timing (`millis()`).
 - Assemble digital state bits into a 16-bit integer bitmask (`ir_raw`) and an array of individual boolean/integer bits (`ir_bits`) for easy parsing by the web GUI.
 
+### Subsystem 6: I2C OLED Hardware Display
+- Initialize an I2C connection on pins `38` (SDA) and `39` (SCL) for a standard SSD1306 128x64 display.
+- **Boot State**: Print the SSID (`ESP32-Diagnostics-AP`) and the static IP (`192.168.4.1`) to help the user connect.
+- **Run State**: Using non-blocking `millis()` timing (e.g., updating at 5Hz or 10Hz), display real-time telemetry on the screen:
+  - Wi-Fi Client count (e.g., "Clients: 1").
+  - IR Sensor Bitmask in HEX (e.g., "IR: 0x03FF").
+  - Current Motor PWM (e.g., "L: 180 R: 180").
+
 ---
 
 ## 4. Single-Page Embedded Web Dashboard Requirements (HTML/CSS/JS)
@@ -147,6 +161,8 @@ lib_deps =
     https://github.com/me-no-dev/ESPAsyncWebServer.git
     https://github.com/me-no-dev/AsyncTCP.git
     bblanchon/ArduinoJson @ ^6.21.3
+    adafruit/Adafruit SSD1306 @ ^2.5.9
+    adafruit/Adafruit GFX Library @ ^1.11.9
 ```
 
 ### 5.2 Source Code File Layout
@@ -155,6 +171,7 @@ Organize the code modularly across cleanly separated files inside `Self_Test_Dia
 - `Config.h`: Hardware pin mappings, PWM frequencies, Wi-Fi credentials, and timing constants.
 - `Motors.h` / `Motors.cpp`: LEDC PWM setup, directional pin outputs, motor speed setters, and watchdog logic.
 - `Sensors.h` / `Sensors.cpp`: IR array pin initialization and bitmask reading functions.
+- `Display.h` / `Display.cpp`: I2C OLED initialization and non-blocking screen rendering.
 - `WebDiagnostics.h` / `WebDiagnostics.cpp`: AsyncWebServer setup, WebSocket event handling, JSON parsing/formatting, and embedded HTML header definitions.
 - `Dashboard.h`: Embedded `PROGMEM` HTML/CSS/JS raw literal string.
 
