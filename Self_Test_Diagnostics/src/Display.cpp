@@ -27,7 +27,7 @@ void initDisplay() {
     display.display();
 }
 
-void updateDisplay(int clientCount, uint16_t irBitmask, int leftPWM, int rightPWM, bool watchdogOk) {
+void updateDisplay(int clientCount, int leftPWM, int rightPWM, bool watchdogOk) {
     if (!display_ok) return;
 
     display.clearDisplay();
@@ -41,11 +41,6 @@ void updateDisplay(int clientCount, uint16_t irBitmask, int leftPWM, int rightPW
     display.println(clientCount);
     
     display.println("---------------------");
-    
-    display.print("IR(HEX): 0x");
-    if (irBitmask < 0x100) display.print("0");
-    if (irBitmask < 0x10) display.print("0");
-    display.println(irBitmask, HEX);
     
     display.print("MOT L: ");
     display.print(leftPWM);

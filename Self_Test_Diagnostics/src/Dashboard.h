@@ -32,11 +32,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
         .btn-dir { background: #333; color: white; border: 1px solid #555; }
         .btn-dir:active { background: var(--accent); color: black; }
 
-        /* IR Sensors */
-        .ir-bar { display: flex; gap: 5px; justify-content: space-between; margin-top: 20px; }
-        .ir-node { flex: 1; height: 40px; border-radius: 5px; background: #333; display: flex; align-items: center; justify-content: center; font-size: 0.8em; font-weight: bold; color: #777; transition: all 0.1s; border: 1px solid #222; }
-        .ir-node.active { background: var(--accent); color: black; box-shadow: 0 0 10px var(--accent); border-color: white; }
-        .ir-stats { margin-top: 15px; font-family: monospace; font-size: 1.1em; color: #aaa; text-align: center; }
+
 
         /* Console */
         .console { height: 200px; background: #000; padding: 10px; overflow-y: auto; font-family: monospace; font-size: 0.9em; border-radius: 5px; border: 1px solid #333; }
@@ -76,24 +72,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
             </div>
         </div>
 
-        <div class="card">
-            <h2>10-CH IR Reflectance Array</h2>
-            <div class="ir-bar" id="ir-container">
-                <div class="ir-node" id="ir-0">IR1</div>
-                <div class="ir-node" id="ir-1">IR2</div>
-                <div class="ir-node" id="ir-2">IR3</div>
-                <div class="ir-node" id="ir-3">IR4</div>
-                <div class="ir-node" id="ir-4">IR5</div>
-                <div class="ir-node" id="ir-5">IR6</div>
-                <div class="ir-node" id="ir-6">IR7</div>
-                <div class="ir-node" id="ir-7">IR8</div>
-                <div class="ir-node" id="ir-8">IR9</div>
-                <div class="ir-node" id="ir-9">IR10</div>
-            </div>
-            <div class="ir-stats">
-                Bitmask: <span id="ir-hex" style="color: white">0x000</span> | DEC: <span id="ir-dec" style="color: white">0</span>
-            </div>
-        </div>
+
         
         <div class="card" style="grid-column: 1 / -1;">
             <h2>Live Telemetry Console</h2>
@@ -103,6 +82,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 
     <script>
         let ws;
+        let lastWatchdogState = true;
         const badge = document.getElementById('status-badge');
         const cons = document.getElementById('console');
         const sliderL = document.getElementById('slider-left');
@@ -134,15 +114,13 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
             ws.onmessage = (e) => {
                 const data = JSON.parse(e.data);
                 if (data.type === 'telemetry') {
-                    // Update IR
-                    document.getElementById('ir-hex').textContent = '0x' + data.ir_raw.toString(16).padStart(3, '0').toUpperCase();
-                    document.getElementById('ir-dec').textContent = data.ir_raw;
-                    for (let i = 0; i < 10; i++) {
-                        document.getElementById('ir-' + i).className = data.ir_bits[i] ? 'ir-node active' : 'ir-node';
-                    }
-                    if (!data.watchdog_ok) {
+                    if (!data.watchdog_ok && lastWatchdogState) {
                         log('WATCHDOG TIMEOUT / EMERGENCY BRAKE', 'err');
                     }
+                    if (data.watchdog_ok && !lastWatchdogState) {
+                        log('Watchdog Reset. Motors Ready.', 'sys');
+                    }
+                    lastWatchdogState = data.watchdog_ok;
                 }
             };
         }

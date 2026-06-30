@@ -2,4 +2,4 @@
 #include <Arduino.h>
 
 void initDisplay();
-void updateDisplay(int clientCount, uint16_t irBitmask, int leftPWM, int rightPWM, bool watchdogOk);
+void updateDisplay(int clientCount, int leftPWM, int rightPWM, bool watchdogOk);

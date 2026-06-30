@@ -53,16 +53,11 @@ int getWebSocketClientCount() {
     return ws.count();
 }
 
-void broadcastTelemetry(uint16_t irBitmask, uint8_t* irBits, int leftPWM, int rightPWM, bool watchdogOk) {
+void broadcastTelemetry(int leftPWM, int rightPWM, bool watchdogOk) {
     if (ws.count() > 0) {
         StaticJsonDocument<256> doc;
         doc["type"] = "telemetry";
         doc["uptime_ms"] = millis();
-        doc["ir_raw"] = irBitmask;
-        JsonArray bits = doc.createNestedArray("ir_bits");
-        for (int i=0; i<10; i++) {
-            bits.add(irBits[i]);
-        }
         JsonObject motors = doc.createNestedObject("motors");
         motors["left"] = leftPWM;
         motors["right"] = rightPWM;

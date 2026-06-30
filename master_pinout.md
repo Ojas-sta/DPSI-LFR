@@ -11,7 +11,7 @@ Here is the finalized hardware pin mapping for the ESP32-S3. This pinout applies
 | **`IN1`** | Left Motor Direction A | **GPIO 12** |
 | **`IN2`** | Left Motor Direction B | **GPIO 11** |
 | **`IN3`** | Right Motor Direction A | **GPIO 10** |
-| **`IN4`** | Right Motor Direction B | **GPIO 9** |
+| **`IN4`** | Right Motor Direction B | **GPIO 3** |
 | **`ENB`** | Right Motor Speed (PWM) | **GPIO 46** |
 
 ## 2. 10-Channel IR Reflectance Array (TCRT5000)

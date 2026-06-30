@@ -26,7 +26,7 @@
 
 // L298N Motor Driver - Right Motor
 #define PIN_MOTOR_IN3   10  // Right Direction A
-#define PIN_MOTOR_IN4   9   // Right Direction B
+#define PIN_MOTOR_IN4   3   // Right Direction B
 #define PIN_MOTOR_ENB   46  // Right Speed PWM
 
 // Indicator LEDs (Rescue Arena Actions)
