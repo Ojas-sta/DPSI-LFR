@@ -1,5 +1,5 @@
 #include <Arduino.h>
-#include <WiFi.h>
+#include <ESP8266WiFi.h>
 #include "Config.h"
 #include "Motors.h"
 #include "WebDiagnostics.h"
@@ -9,7 +9,7 @@ unsigned long g_last_telemetry_time = 0;
 void setup() {
     Serial.begin(115200);
     delay(1000);
-    Serial.println("\n[SYS] Booting ESP32-S3 Diagnostics Firmware (MOTORS ONLY)");
+    Serial.println("\n[SYS] Booting ESP8266 NodeMCU Diagnostics Firmware (MOTORS ONLY)");
 
     // Init hardware
     initMotors();

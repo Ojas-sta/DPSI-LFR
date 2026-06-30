@@ -11,13 +11,13 @@ void initMotors() {
     pinMode(PIN_MOTOR_IN2, OUTPUT);
     pinMode(PIN_MOTOR_IN3, OUTPUT);
     pinMode(PIN_MOTOR_IN4, OUTPUT);
-
-    // Setup LEDC PWM Channels
-    ledcSetup(LEDC_CH_LEFT, PWM_FREQ, PWM_RESOLUTION);
-    ledcAttachPin(PIN_MOTOR_ENA, LEDC_CH_LEFT);
     
-    ledcSetup(LEDC_CH_RIGHT, PWM_FREQ, PWM_RESOLUTION);
-    ledcAttachPin(PIN_MOTOR_ENB, LEDC_CH_RIGHT);
+    pinMode(PIN_MOTOR_ENA, OUTPUT);
+    pinMode(PIN_MOTOR_ENB, OUTPUT);
+
+    // Configure ESP8266 standard PWM
+    analogWriteRange(255); // Force 8-bit resolution (0-255)
+    analogWriteFreq(1000);  // Set stable 1kHz PWM frequency
 
     setLeftMotor(0);
     setRightMotor(0);
@@ -29,15 +29,15 @@ void setLeftMotor(int speed) {
     if (speed == 0) {
         digitalWrite(PIN_MOTOR_IN1, LOW);
         digitalWrite(PIN_MOTOR_IN2, LOW);
-        ledcWrite(LEDC_CH_LEFT, 0);
+        analogWrite(PIN_MOTOR_ENA, 0);
     } else if (speed > 0) {
         digitalWrite(PIN_MOTOR_IN1, HIGH);
         digitalWrite(PIN_MOTOR_IN2, LOW);
-        ledcWrite(LEDC_CH_LEFT, constrain(speed, 0, 255));
+        analogWrite(PIN_MOTOR_ENA, constrain(speed, 0, 255));
     } else {
         digitalWrite(PIN_MOTOR_IN1, LOW);
         digitalWrite(PIN_MOTOR_IN2, HIGH);
-        ledcWrite(LEDC_CH_LEFT, constrain(-speed, 0, 255));
+        analogWrite(PIN_MOTOR_ENA, constrain(-speed, 0, 255));
     }
 }
 
@@ -46,15 +46,15 @@ void setRightMotor(int speed) {
     if (speed == 0) {
         digitalWrite(PIN_MOTOR_IN3, LOW);
         digitalWrite(PIN_MOTOR_IN4, LOW);
-        ledcWrite(LEDC_CH_RIGHT, 0);
+        analogWrite(PIN_MOTOR_ENB, 0);
     } else if (speed > 0) {
         digitalWrite(PIN_MOTOR_IN3, HIGH);
         digitalWrite(PIN_MOTOR_IN4, LOW);
-        ledcWrite(LEDC_CH_RIGHT, constrain(speed, 0, 255));
+        analogWrite(PIN_MOTOR_ENB, constrain(speed, 0, 255));
     } else {
         digitalWrite(PIN_MOTOR_IN3, LOW);
         digitalWrite(PIN_MOTOR_IN4, HIGH);
-        ledcWrite(LEDC_CH_RIGHT, constrain(-speed, 0, 255));
+        analogWrite(PIN_MOTOR_ENB, constrain(-speed, 0, 255));
     }
 }
 
