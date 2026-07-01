@@ -157,7 +157,7 @@ def check_for_updates(stdscr):
         stdscr.refresh()
         time.sleep(1.0)
 
-def run_tui(stdscr):
+def run_tui(stdscr, robot=None, state=None):
     # Initialize Color Pairs for Blue/Purple theme
     curses.start_color()
     curses.init_pair(1, curses.COLOR_BLUE, curses.COLOR_BLACK)       # Blue borders & accents
@@ -177,16 +177,24 @@ def run_tui(stdscr):
     stdscr.nodelay(True)
     curses.curs_set(0) # Hide cursor
     
-    # Initialize hardware and feedback controller
-    robot = RobotHardware()
+    # Initialize hardware and feedback controller if not provided
+    if robot is None:
+        robot = RobotHardware()
+    
+    # Fallback to local state if state object is not passed
+    class LocalState:
+        mode = "AUTO"
+        armed = False
+    
+    if state is None:
+        state = LocalState()
+
     feedback = FeedbackController()
     
     # Preload ASCII art
     art_lines = load_ascii_art()
     
     # Interactive variables
-    mode = "AUTO"
-    armed = False
     status_msg = "Initialized"
     speed_cap = 1.0        # Default 100% speed cap
     turn_speed_cap = 1.0   # Default 100% turn speed cap (customizable)
@@ -320,10 +328,10 @@ def run_tui(stdscr):
             stdscr.addstr(y_ptr + 4, left_x, f"Trim Bias: {robot.trim_bias:+.2f}  [L < {bar_str} > R]", curses.color_pair(2) | curses.A_BOLD)
             
             # Mode & Arm states
-            m_color = curses.color_pair(3) if mode == "AUTO" else curses.color_pair(2)
+            m_color = curses.color_pair(3) if state.mode == "AUTO" else curses.color_pair(2)
             a_color = curses.color_pair(3) if armed else curses.color_pair(4)
-            stdscr.addstr(y_ptr + 5, left_x, f"Mode: {mode}", m_color | curses.A_BOLD)
-            stdscr.addstr(y_ptr + 5, left_x + 20, f"Status: {'ARMED' if armed else 'DISARMED'}", a_color | curses.A_BOLD)
+            stdscr.addstr(y_ptr + 5, left_x, f"Mode: {state.mode}", m_color | curses.A_BOLD)
+            stdscr.addstr(y_ptr + 5, left_x + 20, f"Status: {'ARMED' if state.armed else 'DISARMED'}", a_color | curses.A_BOLD)
             
             # LED & Buzzer status
             led_str = "[ ON ]" if led_enabled else "[ OFF ]"
@@ -418,10 +426,10 @@ def run_tui(stdscr):
             bar_str = "".join(bar_chars)
             stdscr.addstr(y_ptr + 4, left_x, f"Trim Bias: {robot.trim_bias:+.2f}  [L < {bar_str} > R]", curses.color_pair(2) | curses.A_BOLD)
             
-            m_color = curses.color_pair(3) if mode == "AUTO" else curses.color_pair(2)
+            m_color = curses.color_pair(3) if state.mode == "AUTO" else curses.color_pair(2)
             a_color = curses.color_pair(3) if armed else curses.color_pair(4)
-            stdscr.addstr(y_ptr + 5, left_x, f"Mode: {mode}", m_color | curses.A_BOLD)
-            stdscr.addstr(y_ptr + 5, left_x + 20, f"Status: {'ARMED' if armed else 'DISARMED'}", a_color | curses.A_BOLD)
+            stdscr.addstr(y_ptr + 5, left_x, f"Mode: {state.mode}", m_color | curses.A_BOLD)
+            stdscr.addstr(y_ptr + 5, left_x + 20, f"Status: {'ARMED' if state.armed else 'DISARMED'}", a_color | curses.A_BOLD)
             
             # Steer Correction & Assist status
             sc_str = "[ ON ]" if robot.steer_correction_enabled else "[ OFF ]"
@@ -490,14 +498,14 @@ def run_tui(stdscr):
             
             # Arm/Disarm Keyboard Controls
             elif c in (ord('e'), ord('E')):
-                armed = True
+                state.armed = True
                 robot.send_arm(True)
                 if led_enabled:
                     feedback.indicate_armed()
                 status_msg = "Sent ARM command."
                 
             elif c in (ord('q'), ord('Q')):
-                armed = False
+                state.armed = False
                 robot.send_arm(False)
                 if led_enabled:
                     feedback.indicate_disarmed()
@@ -505,9 +513,9 @@ def run_tui(stdscr):
                 
             # Mode Control
             elif c in (ord('m'), ord('M')):
-                mode = "MANUAL" if mode == "AUTO" else "AUTO"
+                state.mode = "MANUAL" if state.mode == "AUTO" else "AUTO"
                 robot.set_speeds(0, 0)
-                status_msg = f"Switched to Pi {mode} mode."
+                status_msg = f"Switched to Pi {state.mode} mode."
                 
             # Emergency Stop
             elif c == ord(' '):
@@ -600,8 +608,7 @@ def run_tui(stdscr):
                 robot.switch_port(new_port)
                 status_msg = f"Switched port to {new_port}."
                 
-        # Manual Drive Controls (Only works if in MANUAL mode and ARMED)
-        if mode == "MANUAL" and armed:
+        if state.mode == "MANUAL" and state.armed:
             # Determine active movement keys based on 0.15s decay
             # Standard terminals don't have keyup events; this decay tracks if keys are held
             active_w = (now - key_timestamps.get('w', 0)) < 0.15

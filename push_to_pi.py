@@ -2,7 +2,7 @@ import paramiko
 import os
 import sys
 
-host = "192.168.29.73"
+host = "10.120.3.168"
 user = "dpsi-lfr"
 password = "toor"
 
