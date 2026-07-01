@@ -4,21 +4,22 @@ import numpy as np
 class VisionAgent:
     def __init__(self, resolution=(320, 240)):
         self.resolution = resolution
-        # Try to initialize PiCamera, fallback to standard cv2 VideoCapture
+        # Try to initialize Picamera2 (for Bookworm), fallback to cv2 VideoCapture
         self.use_picamera = False
         try:
-            from picamera.array import PiRGBArray
-            from picamera import PiCamera
-            self.camera = PiCamera()
-            self.camera.resolution = self.resolution
-            self.camera.framerate = 30
-            self.rawCapture = PiRGBArray(self.camera, size=self.resolution)
+            from picamera2 import Picamera2
+            self.camera = Picamera2()
+            config = self.camera.create_preview_configuration(
+                main={"size": self.resolution, "format": "RGB888"}
+            )
+            self.camera.configure(config)
+            self.camera.start()
             self.use_picamera = True
             # Let camera warmup
             import time
             time.sleep(0.1)
         except ImportError:
-            print("picamera module not found, using cv2.VideoCapture(0) instead.")
+            print("picamera2 module not found, using cv2.VideoCapture(0) instead.")
             self.camera = cv2.VideoCapture(0)
             self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self.resolution[0])
             self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.resolution[1])
@@ -26,16 +27,30 @@ class VisionAgent:
     def get_frame(self):
         """Yields frames from the chosen camera."""
         if self.use_picamera:
-            for frame in self.camera.capture_continuous(self.rawCapture, format="bgr", use_video_port=True):
-                img = frame.array
-                self.rawCapture.truncate(0)
-                yield img
+            while True:
+                frame = self.camera.capture_array()
+                # Picamera2 returns RGB, OpenCV expects BGR. Convert it so color detection works.
+                bgr_frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                yield bgr_frame
         else:
             while True:
                 ret, frame = self.camera.read()
                 if not ret:
                     break
                 yield frame
+
+    def cleanup(self):
+        """Stops the camera safely."""
+        if self.use_picamera:
+            try:
+                self.camera.stop()
+            except Exception:
+                pass
+        else:
+            try:
+                self.camera.release()
+            except Exception:
+                pass
 
     def process_frame(self, frame):
         """

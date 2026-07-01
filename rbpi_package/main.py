@@ -148,6 +148,7 @@ def main():
     finally:
         # Cleanup and safe stop
         hw.cleanup()
+        vision.cleanup()
         feedback.cleanup()
         cv2.destroyAllWindows()
         print("Shutdown complete.")
