@@ -189,6 +189,7 @@ def run_tui(stdscr):
     armed = False
     status_msg = "Initialized"
     speed_cap = 1.0        # Default 100% speed cap
+    turn_speed_cap = 1.0   # Default 100% turn speed cap (customizable)
     led_enabled = True     # LEDs enabled by default
     buzzer_enabled = True  # Buzzer enabled by default
     
@@ -304,6 +305,11 @@ def run_tui(stdscr):
             bar = "█" * cap_val + "░" * (10 - cap_val)
             stdscr.addstr(y_ptr + 2, left_x, f"Speed Cap: {speed_cap*100:3.0f}%  [{bar}]", curses.color_pair(2) | curses.A_BOLD)
             
+            # Turn Speed Scale Visual Progress Bar
+            t_cap_val = int(turn_speed_cap * 10)
+            t_bar = "█" * t_cap_val + "░" * (10 - t_cap_val)
+            stdscr.addstr(y_ptr + 3, left_x, f"Turn Scale: {turn_speed_cap*100:3.0f}%  [{t_bar}]", curses.color_pair(2) | curses.A_BOLD)
+            
             # Trim Bias Slider (Range -0.3 to 0.3 mapped to 13 chars)
             trim_val = int(robot.trim_bias * 20) # scale to -6 to +6
             slider_idx = 6 + trim_val
@@ -311,36 +317,36 @@ def run_tui(stdscr):
             bar_chars[6] = "|"
             bar_chars[max(0, min(12, slider_idx))] = "*"
             bar_str = "".join(bar_chars)
-            stdscr.addstr(y_ptr + 3, left_x, f"Trim Bias: {robot.trim_bias:+.2f}  [L < {bar_str} > R]", curses.color_pair(2) | curses.A_BOLD)
+            stdscr.addstr(y_ptr + 4, left_x, f"Trim Bias: {robot.trim_bias:+.2f}  [L < {bar_str} > R]", curses.color_pair(2) | curses.A_BOLD)
             
             # Mode & Arm states
             m_color = curses.color_pair(3) if mode == "AUTO" else curses.color_pair(2)
             a_color = curses.color_pair(3) if armed else curses.color_pair(4)
-            stdscr.addstr(y_ptr + 4, left_x, f"Mode: {mode}", m_color | curses.A_BOLD)
-            stdscr.addstr(y_ptr + 4, left_x + 20, f"Status: {'ARMED' if armed else 'DISARMED'}", a_color | curses.A_BOLD)
+            stdscr.addstr(y_ptr + 5, left_x, f"Mode: {mode}", m_color | curses.A_BOLD)
+            stdscr.addstr(y_ptr + 5, left_x + 20, f"Status: {'ARMED' if armed else 'DISARMED'}", a_color | curses.A_BOLD)
             
             # LED & Buzzer status
             led_str = "[ ON ]" if led_enabled else "[ OFF ]"
             buz_str = "[ ON ]" if buzzer_enabled else "[ OFF ]"
             led_col = curses.color_pair(3) if led_enabled else curses.color_pair(4)
             buz_col = curses.color_pair(3) if buzzer_enabled else curses.color_pair(4)
-            stdscr.addstr(y_ptr + 5, left_x, "LEDs:   ", curses.color_pair(6))
-            stdscr.addstr(y_ptr + 5, left_x + 8, led_str, led_col | curses.A_BOLD)
-            stdscr.addstr(y_ptr + 5, left_x + 18, "Buzzer: ", curses.color_pair(6))
-            stdscr.addstr(y_ptr + 5, left_x + 26, buz_str, buz_col | curses.A_BOLD)
+            stdscr.addstr(y_ptr + 6, left_x, "LEDs:   ", curses.color_pair(6))
+            stdscr.addstr(y_ptr + 6, left_x + 8, led_str, led_col | curses.A_BOLD)
+            stdscr.addstr(y_ptr + 6, left_x + 18, "Buzzer: ", curses.color_pair(6))
+            stdscr.addstr(y_ptr + 6, left_x + 26, buz_str, buz_col | curses.A_BOLD)
             
             # Steer Correction & Assist status
             sc_str = "[ ON ]" if robot.steer_correction_enabled else "[ OFF ]"
             sa_str = "[ ON ]" if robot.steer_assist_enabled else "[ OFF ]"
             sc_col = curses.color_pair(3) if robot.steer_correction_enabled else curses.color_pair(4)
             sa_col = curses.color_pair(3) if robot.steer_assist_enabled else curses.color_pair(4)
-            stdscr.addstr(y_ptr + 6, left_x, "Steer Corr:   ", curses.color_pair(6))
-            stdscr.addstr(y_ptr + 6, left_x + 12, sc_str, sc_col | curses.A_BOLD)
-            stdscr.addstr(y_ptr + 6, left_x + 22, "Steer Assist: ", curses.color_pair(6))
-            stdscr.addstr(y_ptr + 6, left_x + 36, sa_str, sa_col | curses.A_BOLD)
+            stdscr.addstr(y_ptr + 7, left_x, "Steer Corr:   ", curses.color_pair(6))
+            stdscr.addstr(y_ptr + 7, left_x + 12, sc_str, sc_col | curses.A_BOLD)
+            stdscr.addstr(y_ptr + 7, left_x + 22, "Steer Assist: ", curses.color_pair(6))
+            stdscr.addstr(y_ptr + 7, left_x + 36, sa_str, sa_col | curses.A_BOLD)
             
             # Draw ASCII Chassis Diagram
-            chassis_y = y_ptr + 8
+            chassis_y = y_ptr + 9
             draw_chassis(stdscr, chassis_y, left_x, robot.left_speed, robot.right_speed, 
                          curses.color_pair(1), curses.color_pair(2), curses.color_pair(3), curses.color_pair(4))
             
@@ -353,19 +359,20 @@ def run_tui(stdscr):
             stdscr.addstr(help_y + 1, left_x, "[E] Arm           [Q] Disarm         [Space] ESTOP", curses.color_pair(6))
             stdscr.addstr(help_y + 2, left_x, "[M] Toggle Auto/Manual Mode          [/] Reset Yaw", curses.color_pair(6))
             stdscr.addstr(help_y + 3, left_x, "[W,S] Drive Fwd/Rev   [A,D] Turn L/R (Manual only)", curses.color_pair(6))
-            stdscr.addstr(help_y + 4, left_x, "[ [ ] Dec Speed Cap   [ ] ] Inc Speed Cap", curses.color_pair(6))
-            stdscr.addstr(help_y + 5, left_x, "[ , ] Trim Left       [ . ] Trim Right", curses.color_pair(6))
-            stdscr.addstr(help_y + 6, left_x, "[C] Steer Correction  [V] Steer Assist", curses.color_pair(6))
-            stdscr.addstr(help_y + 7, left_x, "[L] Toggle LEDs       [B] Toggle Buzzer", curses.color_pair(6))
-            stdscr.addstr(help_y + 8, left_x, "[P] Switch Serial Port   [X] Exit CLI", curses.color_pair(6))
+            stdscr.addstr(help_y + 4, left_x, "[ [ ] Dec Fwd Cap     [ ] ] Inc Fwd Cap", curses.color_pair(6))
+            stdscr.addstr(help_y + 5, left_x, "[ { ] Dec Turn Cap    [ } ] Inc Turn Cap", curses.color_pair(6))
+            stdscr.addstr(help_y + 6, left_x, "[ , ] Trim Left       [ . ] Trim Right", curses.color_pair(6))
+            stdscr.addstr(help_y + 7, left_x, "[C] Steer Correction  [V] Steer Assist", curses.color_pair(6))
+            stdscr.addstr(help_y + 8, left_x, "[L] Toggle LEDs       [B] Toggle Buzzer", curses.color_pair(6))
+            stdscr.addstr(help_y + 9, left_x, "[P] Switch Serial Port   [X] Exit CLI", curses.color_pair(6))
             
             # Display recent System Log
-            stdscr.addstr(help_y + 10, left_x, f"System Log: {status_msg}", curses.color_pair(2) | curses.A_BOLD)
+            stdscr.addstr(help_y + 11, left_x, f"System Log: {status_msg}", curses.color_pair(2) | curses.A_BOLD)
             
             # --- Serial Monitor Bordered Box ---
             mon_x = 65
             mon_w = max_x - mon_x - 2
-            mon_h = (help_y + 11) - y_ptr
+            mon_h = (help_y + 12) - y_ptr
             
             draw_box(stdscr, y_ptr, mon_x, mon_h, mon_w, "Serial Telemetry Monitor (Last 10 lines)", curses.color_pair(1))
             
@@ -397,6 +404,11 @@ def run_tui(stdscr):
             bar = "█" * cap_val + "░" * (10 - cap_val)
             stdscr.addstr(y_ptr + 2, left_x, f"Speed Cap: {speed_cap*100:3.0f}%  [{bar}]", curses.color_pair(2) | curses.A_BOLD)
             
+            # Turn Speed Scale Visual Progress Bar
+            t_cap_val = int(turn_speed_cap * 10)
+            t_bar = "█" * t_cap_val + "░" * (10 - t_cap_val)
+            stdscr.addstr(y_ptr + 3, left_x, f"Turn Cap:  {turn_speed_cap*100:3.0f}%  [{t_bar}]", curses.color_pair(2) | curses.A_BOLD)
+            
             # Trim Bias Slider
             trim_val = int(robot.trim_bias * 20)
             slider_idx = 6 + trim_val
@@ -404,24 +416,24 @@ def run_tui(stdscr):
             bar_chars[6] = "|"
             bar_chars[max(0, min(12, slider_idx))] = "*"
             bar_str = "".join(bar_chars)
-            stdscr.addstr(y_ptr + 3, left_x, f"Trim Bias: {robot.trim_bias:+.2f}  [L < {bar_str} > R]", curses.color_pair(2) | curses.A_BOLD)
+            stdscr.addstr(y_ptr + 4, left_x, f"Trim Bias: {robot.trim_bias:+.2f}  [L < {bar_str} > R]", curses.color_pair(2) | curses.A_BOLD)
             
             m_color = curses.color_pair(3) if mode == "AUTO" else curses.color_pair(2)
             a_color = curses.color_pair(3) if armed else curses.color_pair(4)
-            stdscr.addstr(y_ptr + 4, left_x, f"Mode: {mode}", m_color | curses.A_BOLD)
-            stdscr.addstr(y_ptr + 4, left_x + 20, f"Status: {'ARMED' if armed else 'DISARMED'}", a_color | curses.A_BOLD)
+            stdscr.addstr(y_ptr + 5, left_x, f"Mode: {mode}", m_color | curses.A_BOLD)
+            stdscr.addstr(y_ptr + 5, left_x + 20, f"Status: {'ARMED' if armed else 'DISARMED'}", a_color | curses.A_BOLD)
             
             # Steer Correction & Assist status
             sc_str = "[ ON ]" if robot.steer_correction_enabled else "[ OFF ]"
             sa_str = "[ ON ]" if robot.steer_assist_enabled else "[ OFF ]"
             sc_col = curses.color_pair(3) if robot.steer_correction_enabled else curses.color_pair(4)
             sa_col = curses.color_pair(3) if robot.steer_assist_enabled else curses.color_pair(4)
-            stdscr.addstr(y_ptr + 5, left_x, "Steer: ", curses.color_pair(6))
-            stdscr.addstr(y_ptr + 5, left_x + 7, f"Corr:{sc_str}", sc_col | curses.A_BOLD)
-            stdscr.addstr(y_ptr + 5, left_x + 20, f"Assist:{sa_str}", sa_col | curses.A_BOLD)
+            stdscr.addstr(y_ptr + 6, left_x, "Steer: ", curses.color_pair(6))
+            stdscr.addstr(y_ptr + 6, left_x + 7, f"Corr:{sc_str}", sc_col | curses.A_BOLD)
+            stdscr.addstr(y_ptr + 6, left_x + 20, f"Assist:{sa_str}", sa_col | curses.A_BOLD)
             
-            # Chassis (Row y_ptr + 7)
-            chassis_y = y_ptr + 7
+            # Chassis (Row y_ptr + 8)
+            chassis_y = y_ptr + 8
             draw_chassis(stdscr, chassis_y, left_x, robot.left_speed, robot.right_speed, 
                          curses.color_pair(1), curses.color_pair(2), curses.color_pair(3), curses.color_pair(4))
             
@@ -454,7 +466,7 @@ def run_tui(stdscr):
             
             # Draw compact control guide line at the bottom
             if max_y > 2:
-                help_msg = "[E] Arm [Q] Disarm [Space] Stop [,] Trim L [.] Trim R [C] Corr [V] Assist [/] Reset Yaw [X] Exit"
+                help_msg = "[E] Arm [Q] Disarm [Space] Stop [,] Trim L [.] Trim R [C] Corr [V] Assist [{,}] Turn [X] Exit"
                 try:
                     stdscr.addstr(max_y - 1, left_x, help_msg[:max_x - 4], curses.color_pair(1) | curses.A_BOLD)
                 except Exception:
@@ -511,6 +523,15 @@ def run_tui(stdscr):
             elif c == ord(']'):
                 speed_cap = min(1.0, speed_cap + 0.1)
                 status_msg = f"Speed Cap set to {speed_cap*100:.0f}%"
+                
+            # Turn Speed Cap Tuning using `{` and `}` (Shift + [ and ])
+            elif c == ord('{'):
+                turn_speed_cap = max(0.1, turn_speed_cap - 0.1)
+                status_msg = f"Turn Speed Cap set to {turn_speed_cap*100:.0f}%"
+                
+            elif c == ord('}'):
+                turn_speed_cap = min(1.0, turn_speed_cap + 0.1)
+                status_msg = f"Turn Speed Cap set to {turn_speed_cap*100:.0f}%"
                 
             # Drift Trim Bias Adjustments
             elif c == ord(','):
@@ -588,50 +609,42 @@ def run_tui(stdscr):
             active_a = (now - key_timestamps.get('a', 0)) < 0.15
             active_d = (now - key_timestamps.get('d', 0)) < 0.15
             
-            # Max speed configuration (1.0 turns/drives at 100% duty cycle modulated by speed cap)
-            base_speed_fw = 1.0
-            base_speed_turn = 1.0
+            # Base speeds scaled separately by their respective caps
+            base_speed_fw = 1.0 * speed_cap
+            base_speed_turn = 1.0 * turn_speed_cap
             
             if active_w and active_a:
                 # W+A Combination: Curve Left (outer wheel full speed, inner wheel scaled to 40%)
-                spd = base_speed_fw * speed_cap
-                robot.set_speeds(spd * 0.4, spd)
-                status_msg = f"Curving Left (W+A) at speed: {spd:.2f}"
+                robot.set_speeds(base_speed_fw * 0.4, base_speed_fw)
+                status_msg = f"Curving Left (W+A) at speed: {base_speed_fw:.2f}"
             elif active_w and active_d:
                 # W+D Combination: Curve Right (inner wheel scaled to 40%, outer wheel full speed)
-                spd = base_speed_fw * speed_cap
-                robot.set_speeds(spd, spd * 0.4)
-                status_msg = f"Curving Right (W+D) at speed: {spd:.2f}"
+                robot.set_speeds(base_speed_fw, base_speed_fw * 0.4)
+                status_msg = f"Curving Right (W+D) at speed: {base_speed_fw:.2f}"
             elif active_s and active_a:
                 # S+A Combination: Curve Backwards Left (inner wheel scaled to 40%, outer wheel full speed)
-                spd = base_speed_fw * speed_cap
-                robot.set_speeds(-spd * 0.4, -spd)
-                status_msg = f"Curving Back-Left (S+A) at speed: {spd:.2f}"
+                robot.set_speeds(-base_speed_fw * 0.4, -base_speed_fw)
+                status_msg = f"Curving Back-Left (S+A) at speed: {base_speed_fw:.2f}"
             elif active_s and active_d:
                 # S+D Combination: Curve Backwards Right (inner wheel full speed, outer wheel scaled to 40%)
-                spd = base_speed_fw * speed_cap
-                robot.set_speeds(-spd, -spd * 0.4)
-                status_msg = f"Curving Back-Right (S+D) at speed: {spd:.2f}"
+                robot.set_speeds(-base_speed_fw, -base_speed_fw * 0.4)
+                status_msg = f"Curving Back-Right (S+D) at speed: {base_speed_fw:.2f}"
             elif active_w:
                 # W: Drive Forward at max speed
-                spd = base_speed_fw * speed_cap
-                robot.set_speeds(spd, spd)
-                status_msg = f"Driving Forward at speed: {spd:.2f}"
+                robot.set_speeds(base_speed_fw, base_speed_fw)
+                status_msg = f"Driving Forward at speed: {base_speed_fw:.2f}"
             elif active_s:
                 # S: Drive Backward at max speed
-                spd = -base_speed_fw * speed_cap
-                robot.set_speeds(spd, spd)
-                status_msg = f"Driving Backward at speed: {spd:.2f}"
+                robot.set_speeds(-base_speed_fw, -base_speed_fw)
+                status_msg = f"Driving Backward at speed: {base_speed_fw:.2f}"
             elif active_a:
-                # A: Spin Left on the spot (swapped in hardware.py to correct reversed channels)
-                spd = base_speed_turn * speed_cap
-                robot.set_speeds(-spd, spd)
-                status_msg = f"Turning Left at speed: {spd:.2f}"
+                # A: Spin Left on the spot (uses custom turn scale)
+                robot.set_speeds(-base_speed_turn, base_speed_turn)
+                status_msg = f"Turning Left at speed: {base_speed_turn:.2f}"
             elif active_d:
-                # D: Spin Right on the spot (swapped in hardware.py to correct reversed channels)
-                spd = base_speed_turn * speed_cap
-                robot.set_speeds(spd, -spd)
-                status_msg = f"Turning Right at speed: {spd:.2f}"
+                # D: Spin Right on the spot (uses custom turn scale)
+                robot.set_speeds(base_speed_turn, -base_speed_turn)
+                status_msg = f"Turning Right at speed: {base_speed_turn:.2f}"
             else:
                 # No keys active: Auto-stop safety override
                 robot.set_speeds(0.0, 0.0)
