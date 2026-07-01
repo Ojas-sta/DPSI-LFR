@@ -384,20 +384,11 @@ class RobotHardware:
         else:
             self.was_driving_straight = False
 
-        # Apply trim_bias (trim_bias > 0 reduces Right, trim_bias < 0 reduces Left)
-        # In reverse, the target wheel is inverted to correct drift to the same side
         if trimmed_left != 0.0 or trimmed_right != 0.0:
-            is_reverse = left_speed < 0.0 and right_speed < 0.0
-            if is_reverse:
-                if self.trim_bias > 0.0:
-                    trimmed_left = trimmed_left * (1.0 - self.trim_bias)
-                elif self.trim_bias < 0.0:
-                    trimmed_right = trimmed_right * (1.0 + self.trim_bias)
-            else:
-                if self.trim_bias > 0.0:
-                    trimmed_right = trimmed_right * (1.0 - self.trim_bias)
-                elif self.trim_bias < 0.0:
-                    trimmed_left = trimmed_left * (1.0 + self.trim_bias)
+            if self.trim_bias > 0.0:
+                trimmed_right = trimmed_right * (1.0 - self.trim_bias)
+            elif self.trim_bias < 0.0:
+                trimmed_left = trimmed_left * (1.0 + self.trim_bias)
                 
         self.left_speed = max(-1.0, min(1.0, float(trimmed_left)))
         self.right_speed = max(-1.0, min(1.0, float(trimmed_right)))
