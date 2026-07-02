@@ -1,18 +1,18 @@
 # DPSI-LFR V2 Master Pinout
 
-This document outlines the pin mappings for the **Raspberry Pi 4B (High-Level Brain)**, the **Arduino Uno (Serial Diagnostics/Motor Actuation Node)**, and the **ESP32-S3 (Alternative Main Production Node)**.
+This document outlines the pin mappings for the **Raspberry Pi 4B (single-board controller)** and the **ESP32-S3 (alternative production node)**.
 
 ---
 
 ## 🧠 Node 1: Raspberry Pi 4B & Peripherals
 
-The Raspberry Pi handles computer vision, MPU6050 IMU logging, and competition indicators (LEDs/Buzzer).
+The Raspberry Pi now handles computer vision, direct L298N motor PWM, MPU6050 IMU logging, and competition indicators (LEDs/Buzzer).
 
-### 1. Serial Communication (to Arduino Uno)
-*Connect these pins if using Hardware UART instead of a USB Serial cable.*
-* **TX:** GPIO 14 (Physical Pin 8) -> Arduino Uno RX (`D0`)
-* **RX:** GPIO 15 (Physical Pin 10) <- Arduino Uno TX (`D1`) through a 5V-to-3.3V level shifter or divider
-* **GND:** Physical Pin 6 -> Arduino Uno GND
+### 1. Preserved Legacy UART Pins
+These pins are preserved from the older two-node layout. They are not required by the Pi-only controller, but are intentionally not reassigned.
+* **TX:** GPIO 14 (Physical Pin 8)
+* **RX:** GPIO 15 (Physical Pin 10)
+* **GND:** Physical Pin 6
 
 ### 2. Competition Indicators (feedback.py)
 * **Red LED:** GPIO 5 (Physical Pin 29)
@@ -25,40 +25,30 @@ The Raspberry Pi handles computer vision, MPU6050 IMU logging, and competition i
 * **VCC:** 3.3V (Physical Pin 1)
 * **GND:** GND (Physical Pin 9)
 
----
+### 4. Direct Pi -> L298N Motor Driver Control
+These are the new Pi-only motor pins. They avoid the preserved LED, buzzer, I2C, and legacy UART pins.
 
-## 🔌 Node 2: Arduino Uno (Serial Diagnostics Node)
+| L298N Signal | Raspberry Pi BCM GPIO | Physical Pin | Notes |
+| :--- | :---: | :---: | :--- |
+| **`ENA`** (Left Motor PWM) | GPIO 12 | Pin 32 | PWM output |
+| **`IN1`** (Left Direction A) | GPIO 16 | Pin 36 | Digital output |
+| **`IN2`** (Left Direction B) | GPIO 20 | Pin 38 | Digital output |
+| **`IN3`** (Right Direction A) | GPIO 21 | Pin 40 | Digital output |
+| **`IN4`** (Right Direction B) | GPIO 26 | Pin 37 | Digital output |
+| **`ENB`** (Right Motor PWM) | GPIO 18 | Pin 12 | PWM output |
+| **`GND`** | Any Pi GND | Pin 6/9/14/20/25/30/34/39 | Must share ground with L298N |
 
-The Arduino Uno handles serial diagnostics commands and physical motor driving. The old ESP8266 Wi-Fi dashboard and WebSocket functions have been removed.
+Power notes:
+* Do not power the N20 motors from the Pi 5V rail.
+* Use the LM2596 buck converter for the logic rail as wired, and a suitable motor supply for the L298N motor input.
+* Keep Pi GND, L298N GND, and motor-supply GND common.
 
-### 1. Motor Driver Control (L298N)
-| Signal Name | Arduino Uno Pin | Notes |
-| :--- | :---: | :--- |
-| **`ENA`** (Left Motor PWM) | `D5` | PWM |
-| **`IN1`** (Left Direction A) | `D7` | Digital output |
-| **`IN2`** (Left Direction B) | `D8` | Digital output |
-| **`IN3`** (Right Direction A) | `D9` | Digital output |
-| **`IN4`** (Right Direction B) | `D10` | Digital output |
-| **`ENB`** (Right Motor PWM) | `D6` | PWM |
-
-### 2. ESP8266-to-Uno Migration Map
-| L298N Signal | Old ESP8266 Pin | Old ESP GPIO | New Arduino Uno Pin |
-| :--- | :---: | :---: | :---: |
-| **`ENA`** (Left PWM) | `D6` | GPIO 12 | `D5` PWM |
-| **`IN1`** | `D5` | GPIO 14 | `D7` |
-| **`IN2`** | `D4` | GPIO 2 | `D8` |
-| **`IN3`** | `D3` | GPIO 0 | `D9` |
-| **`IN4`** | `D2` | GPIO 4 | `D10` |
-| **`ENB`** (Right PWM) | `D1` | GPIO 5 | `D6` PWM |
-
-### 3. Serial Command Protocol
-| Command | Meaning |
-| :--- | :--- |
-| `M:<left>,<right>` | Set motor speeds in `-1.0..1.0` when armed and in auto mode |
-| `A:<0|1>` | Disarm or arm the motor output |
-| `C:<0|1>` | Set manual mode (`0`) or auto serial-control mode (`1`) |
-| `P` | Ping; Uno replies with `P_ACK` |
-| `T:<ms>,<left>,<right>,<watchdog>,<armed>,<auto>` | Periodic serial telemetry from Uno |
+### 5. Camera Mounting Recommendation
+For the rear-caster chassis (140 mm track width, 180 mm caster arc), start with:
+* Camera height: 85-120 mm above the mat.
+* Camera pitch: 18-25 degrees downward from horizontal; start at 22 degrees.
+* Aim point: bottom third of the image should see roughly 60-90 mm in front of the drive axle.
+* Keep the lens centered on the robot centerline and rigidly mounted; tune software ROI before changing pins or wiring.
 
 ---
 

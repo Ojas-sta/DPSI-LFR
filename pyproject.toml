@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dpsi-lfr"
+version = "0.1.0"
+description = "DPSI-LFR Raspberry Pi 4B line follower controller"
+readme = "rpi_line_follower/README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "opencv-python",
+    "smbus2",
+]
+
+[project.optional-dependencies]
+pi = [
+    "picamera2",
+    "RPi.GPIO",
+]
+
+[project.scripts]
+dpsi-cli = "rpi_line_follower.pi_only_follower:main"
+
+[tool.setuptools.packages.find]
+include = ["rpi_line_follower*"]
