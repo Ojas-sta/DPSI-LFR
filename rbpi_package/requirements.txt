@@ -1,4 +1,0 @@
-pyserial
-gpiozero
-opencv-python
-numpy

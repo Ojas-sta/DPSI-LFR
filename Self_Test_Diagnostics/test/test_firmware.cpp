@@ -4,10 +4,8 @@
 #include "../src/Motors.h"
 #include "../src/Config.h"
 
-// Declare functions under test from main.cpp and WebDiagnostics.cpp
+// Declare functions under test from main.cpp.
 extern void handleSerialInput();
-extern AsyncWebSocket ws;
-extern void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len);
 
 void run_test_safety_overrides() {
     std::cout << "[TEST] Running Safety Override (g_armed = false) Tests..." << std::endl;
@@ -41,20 +39,15 @@ void run_test_safety_overrides() {
     }
     std::cout << "  PASS: UART commands forced to 0 when disarmed." << std::endl;
 
-    // 3. WebSocket command while disarmed
-    g_armed = false;
-    g_auto_mode = false;
+    // 3. UART arm command can re-arm the system.
     Serial.clear();
-    std::string ws_data = "{\"action\":\"motor\",\"left\":150,\"right\":-100}";
-    AsyncWebSocketClient client(1);
-    AwsFrameInfo info = {true, 0, ws_data.length(), WS_TEXT};
-    onEvent(&ws, &client, WS_EVT_DATA, &info, (uint8_t*)ws_data.c_str(), ws_data.length());
-    if (getLeftMotorPWM() != 0 || getRightMotorPWM() != 0) {
-        std::cerr << "  FAIL: WebSocket command accepted while disarmed! Left: "
-                  << getLeftMotorPWM() << ", Right: " << getRightMotorPWM() << std::endl;
+    Serial.feed("A:1\n");
+    handleSerialInput();
+    if (!g_armed) {
+        std::cerr << "  FAIL: UART arm command did not arm the system." << std::endl;
         exit(1);
     }
-    std::cout << "  PASS: WebSocket commands forced to 0 when disarmed." << std::endl;
+    std::cout << "  PASS: UART arm command updates safety state." << std::endl;
 }
 
 void run_test_auto_mode() {
@@ -76,20 +69,17 @@ void run_test_auto_mode() {
     }
     std::cout << "  PASS: UART commands ignored in MANUAL mode." << std::endl;
 
-    // 2. In manual mode (g_auto_mode = false), WebSocket commands must be processed
-    std::string ws_data = "{\"action\":\"motor\",\"left\":120,\"right\":-90}";
-    AsyncWebSocketClient client(1);
-    AwsFrameInfo info = {true, 0, ws_data.length(), WS_TEXT};
-    onEvent(&ws, &client, WS_EVT_DATA, &info, (uint8_t*)ws_data.c_str(), ws_data.length());
-    if (getLeftMotorPWM() != 120 || getRightMotorPWM() != -90) {
-        std::cerr << "  FAIL: WebSocket command ignored in MANUAL mode! Left: "
-                  << getLeftMotorPWM() << ", Right: " << getRightMotorPWM() << std::endl;
+    // 2. C:1 switches back to AUTO mode.
+    Serial.clear();
+    Serial.feed("C:1\n");
+    handleSerialInput();
+    if (!g_auto_mode) {
+        std::cerr << "  FAIL: UART C:1 did not switch to AUTO mode." << std::endl;
         exit(1);
     }
-    std::cout << "  PASS: WebSocket commands processed in MANUAL mode." << std::endl;
+    std::cout << "  PASS: UART mode command switches back to AUTO mode." << std::endl;
 
-    // 3. In auto mode (g_auto_mode = true), UART command must be processed
-    g_auto_mode = true;
+    // 3. In auto mode (g_auto_mode = true), UART command must be processed.
     Serial.clear();
     Serial.feed("M:0.6,-0.4\n");
     handleSerialInput();
@@ -102,17 +92,6 @@ void run_test_auto_mode() {
         exit(1);
     }
     std::cout << "  PASS: UART commands processed in AUTO mode." << std::endl;
-
-    // 4. In auto mode (g_auto_mode = true), WebSocket commands must be ignored
-    ws_data = "{\"action\":\"motor\",\"left\":50,\"right\":50}";
-    onEvent(&ws, &client, WS_EVT_DATA, &info, (uint8_t*)ws_data.c_str(), ws_data.length());
-    // Should still have previous UART values (expected_l, expected_r)
-    if (getLeftMotorPWM() != expected_l || getRightMotorPWM() != expected_r) {
-        std::cerr << "  FAIL: WebSocket command processed in AUTO mode! Left: "
-                  << getLeftMotorPWM() << ", Right: " << getRightMotorPWM() << std::endl;
-        exit(1);
-    }
-    std::cout << "  PASS: WebSocket commands ignored in AUTO mode." << std::endl;
 }
 
 void run_test_uart_scaling_constraints() {
@@ -167,7 +146,7 @@ void run_test_ping_pong() {
 }
 
 int main() {
-    std::cout << "=== ESP8266 FIRMWARE VERIFICATION START ===" << std::endl;
+    std::cout << "=== ARDUINO UNO FIRMWARE VERIFICATION START ===" << std::endl;
     run_test_safety_overrides();
     run_test_auto_mode();
     run_test_uart_scaling_constraints();

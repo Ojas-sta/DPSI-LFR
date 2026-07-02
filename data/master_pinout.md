@@ -1,6 +1,6 @@
 # DPSI-LFR V2 Master Pinout
 
-This document outlines the pin mappings for the **Raspberry Pi 4B (High-Level Brain)**, the **ESP8266 (Diagnostics/Motor Actuation Node)**, and the **ESP32-S3 (Alternative Main Production Node)**.
+This document outlines the pin mappings for the **Raspberry Pi 4B (High-Level Brain)**, the **Arduino Uno (Serial Diagnostics/Motor Actuation Node)**, and the **ESP32-S3 (Alternative Main Production Node)**.
 
 ---
 
@@ -8,11 +8,11 @@ This document outlines the pin mappings for the **Raspberry Pi 4B (High-Level Br
 
 The Raspberry Pi handles computer vision, MPU6050 IMU logging, and competition indicators (LEDs/Buzzer).
 
-### 1. Serial Communication (to ESP8266)
+### 1. Serial Communication (to Arduino Uno)
 *Connect these pins if using Hardware UART instead of a USB Serial cable.*
-* **TX:** GPIO 14 (Physical Pin 8) ➔ ESP8266 RX
-* **RX:** GPIO 15 (Physical Pin 10) ➔ ESP8266 TX
-* **GND:** Physical Pin 6 ➔ ESP8266 GND
+* **TX:** GPIO 14 (Physical Pin 8) -> Arduino Uno RX (`D0`)
+* **RX:** GPIO 15 (Physical Pin 10) <- Arduino Uno TX (`D1`) through a 5V-to-3.3V level shifter or divider
+* **GND:** Physical Pin 6 -> Arduino Uno GND
 
 ### 2. Competition Indicators (feedback.py)
 * **Red LED:** GPIO 5 (Physical Pin 29)
@@ -27,19 +27,38 @@ The Raspberry Pi handles computer vision, MPU6050 IMU logging, and competition i
 
 ---
 
-## 🔌 Node 2: ESP8266 (Diagnostics Node)
+## 🔌 Node 2: Arduino Uno (Serial Diagnostics Node)
 
-The ESP8266 handles manual dashboard control, WebSocket communication, and physical motor driving.
+The Arduino Uno handles serial diagnostics commands and physical motor driving. The old ESP8266 Wi-Fi dashboard and WebSocket functions have been removed.
 
 ### 1. Motor Driver Control (L298N)
-| Signal Name | ESP8266 Pin | Physical NodeMCU Pin |
-| :--- | :---: | :---: |
-| **`ENA`** (Left Motor PWM) | `D6` | GPIO 12 |
-| **`IN1`** (Left Direction A) | `D5` | GPIO 14 |
-| **`IN2`** (Left Direction B) | `D4` | GPIO 2 |
-| **`IN3`** (Right Direction A) | `D3` | GPIO 0 |
-| **`IN4`** (Right Direction B) | `D2` | GPIO 4 |
-| **`ENB`** (Right Motor PWM) | `D1` | GPIO 5 |
+| Signal Name | Arduino Uno Pin | Notes |
+| :--- | :---: | :--- |
+| **`ENA`** (Left Motor PWM) | `D5` | PWM |
+| **`IN1`** (Left Direction A) | `D7` | Digital output |
+| **`IN2`** (Left Direction B) | `D8` | Digital output |
+| **`IN3`** (Right Direction A) | `D9` | Digital output |
+| **`IN4`** (Right Direction B) | `D10` | Digital output |
+| **`ENB`** (Right Motor PWM) | `D6` | PWM |
+
+### 2. ESP8266-to-Uno Migration Map
+| L298N Signal | Old ESP8266 Pin | Old ESP GPIO | New Arduino Uno Pin |
+| :--- | :---: | :---: | :---: |
+| **`ENA`** (Left PWM) | `D6` | GPIO 12 | `D5` PWM |
+| **`IN1`** | `D5` | GPIO 14 | `D7` |
+| **`IN2`** | `D4` | GPIO 2 | `D8` |
+| **`IN3`** | `D3` | GPIO 0 | `D9` |
+| **`IN4`** | `D2` | GPIO 4 | `D10` |
+| **`ENB`** (Right PWM) | `D1` | GPIO 5 | `D6` PWM |
+
+### 3. Serial Command Protocol
+| Command | Meaning |
+| :--- | :--- |
+| `M:<left>,<right>` | Set motor speeds in `-1.0..1.0` when armed and in auto mode |
+| `A:<0|1>` | Disarm or arm the motor output |
+| `C:<0|1>` | Set manual mode (`0`) or auto serial-control mode (`1`) |
+| `P` | Ping; Uno replies with `P_ACK` |
+| `T:<ms>,<left>,<right>,<watchdog>,<armed>,<auto>` | Periodic serial telemetry from Uno |
 
 ---
 

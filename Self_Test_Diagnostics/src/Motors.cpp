@@ -19,10 +19,6 @@ void initMotors() {
     pinMode(PIN_MOTOR_ENA, OUTPUT);
     pinMode(PIN_MOTOR_ENB, OUTPUT);
 
-    // Configure ESP8266 standard PWM
-    analogWriteRange(255); // Force 8-bit resolution (0-255)
-    analogWriteFreq(1000);  // Set stable 1kHz PWM frequency
-
     setLeftMotor(0);
     setRightMotor(0);
     feedMotorWatchdog();

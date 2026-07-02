@@ -1,8 +1,7 @@
 #include <Arduino.h>
-#include <ESP8266WiFi.h>
+#include <stdlib.h>
 #include "Config.h"
 #include "Motors.h"
-#include "WebDiagnostics.h"
 
 unsigned long g_last_telemetry_time = 0;
 
@@ -21,9 +20,12 @@ void handleSerialInput() {
                 if (strncmp(rx_buffer, "M:", 2) == 0) {
                     // Only process UART commands if the system is in AUTO mode
                     if (g_auto_mode) {
-                        float left_val = 0.0;
-                        float right_val = 0.0;
-                        if (sscanf(rx_buffer + 2, "%f,%f", &left_val, &right_val) == 2) {
+                        char *separator = strchr(rx_buffer + 2, ',');
+                        if (separator != nullptr) {
+                            *separator = '\0';
+                            float left_val = atof(rx_buffer + 2);
+                            float right_val = atof(separator + 1);
+
                             // Map range -1.0..1.0 to -255..255 by multiplying by exactly 255
                             int left_pwm = (int)(left_val * 255.0f);
                             int right_pwm = (int)(right_val * 255.0f);
@@ -65,26 +67,10 @@ void handleSerialInput() {
 void setup() {
     Serial.begin(115200);
     delay(1000);
-    Serial.println("\n[SYS] Booting ESP8266 NodeMCU Diagnostics Firmware (MOTORS ONLY)");
+    Serial.println("\n[SYS] Booting Arduino Uno Diagnostics Firmware (SERIAL MOTOR CONTROL)");
 
     // Init hardware
     initMotors();
-
-    // Setup AP
-    WiFi.mode(WIFI_AP);
-    WiFi.softAP(AP_SSID, AP_PASS);
-    
-    // Force specific IP
-    IPAddress ip(192, 168, 4, 1);
-    IPAddress gateway(192, 168, 4, 1);
-    IPAddress subnet(255, 255, 255, 0);
-    WiFi.softAPConfig(ip, gateway, subnet);
-
-    Serial.print("[WIFI] AP Started. IP: ");
-    Serial.println(WiFi.softAPIP());
-
-    // Init Web server & WebSocket
-    initWebDiagnostics();
 }
 
 void loop() {
@@ -96,13 +82,20 @@ void loop() {
     // Non-blocking Watchdog check
     checkMotorWatchdog();
 
-    // Clean up websocket clients
-    processWebSocketClients();
-
-    // Telemetry Update Loop (20Hz)
+    // Serial telemetry update loop.
     if (current_time - g_last_telemetry_time >= TELEMETRY_INTERVAL_MS) {
         g_last_telemetry_time = current_time;
-
-        broadcastTelemetry(getLeftMotorPWM(), getRightMotorPWM(), isWatchdogOk());
+        Serial.print("T:");
+        Serial.print(current_time);
+        Serial.print(",");
+        Serial.print(getLeftMotorPWM());
+        Serial.print(",");
+        Serial.print(getRightMotorPWM());
+        Serial.print(",");
+        Serial.print(isWatchdogOk() ? 1 : 0);
+        Serial.print(",");
+        Serial.print(g_armed ? 1 : 0);
+        Serial.print(",");
+        Serial.println(g_auto_mode ? 1 : 0);
     }
 }

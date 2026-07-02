@@ -2,4 +2,3 @@
 
 unsigned long simulated_time = 0;
 SerialMock Serial;
-WiFiMock WiFi;
