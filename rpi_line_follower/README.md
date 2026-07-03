@@ -27,7 +27,7 @@ Useful options:
 ./dpsi-cli --self-test --no-imu
 ./dpsi-cli --benchmark --benchmark-frames 1000
 ./dpsi-cli --benchmark --report-file reports/benchmark.json
-./dpsi-cli --world-model --preview
+./dpsi-cli --world-model --world-display
 ```
 
 Default mode is `prelim`, matching the annexure: green dot blinks the green LED and continues movement; red dot stops completely and blinks/beeps red feedback. `--mode final` enables deterministic green-marker turn decisions.
@@ -39,19 +39,20 @@ Human masking uses OpenCV's built-in HOG person detector when available. Detecte
 Run the alternate bird's-eye navigator:
 
 ```bash
-dpsi-cli --world-model --preview
+dpsi-cli --world-model --world-display
 ```
 
-This mode maps the camera image into a top-down world view, detects the black path and red horizontal lines in that warped map, waits at the first red line, drives after the start line clears, then stops at the next different red line.
+This mode maps the camera image into a top-down world view, displays that warped view live during inference, detects the black path and red horizontal lines in that warped map, waits at the first red line, drives after the start line clears, then stops at the next different red line.
 
 Useful options:
 
 ```bash
-dpsi-cli --world-model --dry-run --preview
+dpsi-cli --world-model --dry-run --world-display
+dpsi-cli --world-model --preview
 dpsi-cli --world-model --world-size 320
 ```
 
-The default perspective source points assume the camera sees a trapezoid of mat in front of the robot. If the top-down view looks skewed, tune `TopDownMapper.src_ratios` in [pi_only_follower.py](pi_only_follower.py) using `--preview` until tape lines look roughly parallel in the warped window.
+Use `--world-display` for only the live top-down inference window. Use `--preview` when you also want the line and red-line mask debug windows. The default perspective source points assume the camera sees a trapezoid of mat in front of the robot. If the top-down view looks skewed, tune `TopDownMapper.src_ratios` in [pi_only_follower.py](pi_only_follower.py) using `--preview` until tape lines look roughly parallel in the warped window.
 
 ## Raspberry Pi Installation
 

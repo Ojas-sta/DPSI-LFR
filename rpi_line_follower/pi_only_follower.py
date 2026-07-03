@@ -1560,6 +1560,7 @@ def run_world_model(args: argparse.Namespace) -> int:
     mapper = TopDownMapper(output_size=(args.world_size, args.world_size))
     navigator = ExpertWorldNavigator(tunables, motor)
     preview = args.preview
+    display_world = args.preview or args.world_display
     running = True
 
     if motor.buzzer:
@@ -1592,8 +1593,12 @@ def run_world_model(args: argparse.Namespace) -> int:
                     f"err={view.error:+.3f} L/R={left:+.3f}/{right:+.3f} turn={turn:+.3f}"
                 )
 
-            if preview:
+            if display_world:
                 cv2.imshow("DPSI-LFR Top Down World", view.warped)
+                if cv2.waitKey(1) & 0xFF == ord("q"):
+                    running = False
+
+            if preview:
                 cv2.imshow("DPSI-LFR World Line Mask", view.black_mask)
                 cv2.imshow("DPSI-LFR World Red Mask", view.red_mask)
                 if cv2.waitKey(1) & 0xFF == ord("q"):
@@ -1608,7 +1613,7 @@ def run_world_model(args: argparse.Namespace) -> int:
             time.sleep(0.20)
         motor.close()
         camera.close()
-        if preview:
+        if display_world or preview:
             cv2.destroyAllWindows()
     return 0
 
@@ -1750,6 +1755,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--report-file", help="Write JSON report for --self-test or --benchmark")
     parser.add_argument("--world-model", action="store_true", help="Run top-down world mapper plus expert red-line-to-red-line navigator")
     parser.add_argument("--world-size", type=int, default=320, help="Square output size for --world-model bird's-eye map")
+    parser.add_argument("--world-display", action="store_true", help="During --world-model, show the live top-down warped world view")
     return parser
 
 
