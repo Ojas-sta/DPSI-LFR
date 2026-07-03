@@ -16,10 +16,13 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from rpi_line_follower.pi_only_follower import (
+    ExpertWorldNavigator,
     MotorDriver,
     Navigator,
+    TopDownMapper,
     Tunables,
     VisionProcessor,
+    WorldView,
     build_arg_parser,
     load_tunables,
     save_tunables,
@@ -65,6 +68,13 @@ def make_intersection_frame():
     return frame
 
 
+def make_world_frame(red_y=218):
+    frame = np.full((240, 320, 3), 255, dtype=np.uint8)
+    cv2.line(frame, (160, 40), (160, 238), (0, 0, 0), 14)
+    cv2.line(frame, (45, red_y), (275, red_y), (0, 0, 220), 12)
+    return frame
+
+
 def main():
     vision = VisionProcessor()
     motor = MotorDriver(dry_run=True)
@@ -94,6 +104,34 @@ def main():
     print("intersection", result.intersection, result.intersection_branch_count, result.special_state)
     assert result.intersection
     assert result.intersection_branch_count >= 2
+
+    mapper = TopDownMapper(output_size=(320, 240))
+    mapper.src_ratios = np.array([[0, 1], [1, 1], [1, 0], [0, 0]], dtype=np.float32)
+    mapper.dst_points = np.array([[0, 239], [319, 239], [319, 0], [0, 0]], dtype=np.float32)
+    world = mapper.process(make_world_frame())
+    print("world-map", world.line_seen, round(world.error, 3), world.red_line_seen, world.red_line_y)
+    assert world.line_seen
+    assert abs(world.error) < 0.08
+    assert world.red_line_seen
+
+    world_motor = MotorDriver(dry_run=True)
+    world_motor.buzzer = DummyBuzzer()
+    expert = ExpertWorldNavigator(Tunables(), world_motor)
+    empty_mask = np.zeros((240, 320), dtype=np.uint8)
+    start_view = WorldView(warped=make_world_frame(), black_mask=empty_mask, red_mask=empty_mask, red_line_seen=True)
+    left, right, state, turn = expert.update(start_view)
+    print("world-start", state, left, right)
+    assert state == "START_RED_SEEN"
+    clear_view = WorldView(warped=make_world_frame(), black_mask=empty_mask, red_mask=empty_mask, line_seen=True, error=0.0)
+    left, right, state, turn = expert.update(clear_view)
+    print("world-clear", state, left, right)
+    assert state == "NAVIGATE_WORLD"
+    expert.start_seen_time = time_start = expert.start_seen_time - 1.0 if expert.start_seen_time else None
+    finish_view = WorldView(warped=make_world_frame(), black_mask=empty_mask, red_mask=empty_mask, red_line_seen=True)
+    left, right, state, turn = expert.update(finish_view)
+    print("world-finish", state, left, right, time_start is not None)
+    assert state == "STOP_FINISH_RED"
+    world_motor.close()
 
     result = vision.process(make_frame(160))
     nav = Navigator(Tunables(), motor)
@@ -182,6 +220,12 @@ def main():
     print("report-parser", args.benchmark, args.report_file)
     assert args.benchmark
     assert args.report_file == "reports/benchmark.json"
+
+    args = build_arg_parser().parse_args(["--world-model", "--dry-run", "--world-size", "240"])
+    print("world-parser", args.world_model, args.dry_run, args.world_size)
+    assert args.world_model
+    assert args.dry_run
+    assert args.world_size == 240
 
     motor.close()
     print("SMOKE PASS")

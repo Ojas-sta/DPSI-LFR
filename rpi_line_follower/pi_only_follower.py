@@ -1012,6 +1012,206 @@ class Navigator:
 
 
 # =============================================================================
+# TOP-DOWN WORLD MODEL NAVIGATION
+# =============================================================================
+
+
+@dataclass
+class WorldView:
+    warped: np.ndarray
+    black_mask: np.ndarray
+    red_mask: np.ndarray
+    line_seen: bool = False
+    line_center_x: Optional[int] = None
+    line_center_y: Optional[int] = None
+    error: float = 0.0
+    red_line_seen: bool = False
+    red_line_y: Optional[int] = None
+    red_line_area: float = 0.0
+    state_hint: str = "WORLD"
+
+
+class TopDownMapper:
+    """Map the forward camera image into a bird's-eye world view."""
+
+    def __init__(self, output_size: Tuple[int, int] = (320, 320)):
+        load_vision_deps()
+        self.output_width, self.output_height = output_size
+        self.src_ratios = np.array(
+            [
+                [0.18, 0.96],  # near-left
+                [0.82, 0.96],  # near-right
+                [0.60, 0.50],  # far-right
+                [0.40, 0.50],  # far-left
+            ],
+            dtype=np.float32,
+        )
+        self.dst_points = np.array(
+            [
+                [0.12 * self.output_width, self.output_height - 1],
+                [0.88 * self.output_width, self.output_height - 1],
+                [0.88 * self.output_width, 0],
+                [0.12 * self.output_width, 0],
+            ],
+            dtype=np.float32,
+        )
+        self.red_lower_1 = np.array([0, 90, 80])
+        self.red_upper_1 = np.array([10, 255, 255])
+        self.red_lower_2 = np.array([165, 90, 80])
+        self.red_upper_2 = np.array([180, 255, 255])
+
+    def warp(self, frame: np.ndarray) -> np.ndarray:
+        h, w = frame.shape[:2]
+        src = self.src_ratios.copy()
+        src[:, 0] *= w
+        src[:, 1] *= h
+        matrix = cv2.getPerspectiveTransform(src.astype(np.float32), self.dst_points)
+        return cv2.warpPerspective(frame, matrix, (self.output_width, self.output_height))
+
+    def process(self, frame: np.ndarray, draw_debug: bool = False) -> WorldView:
+        warped = self.warp(frame)
+        hsv = cv2.cvtColor(warped, cv2.COLOR_BGR2HSV)
+        gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
+        blur = cv2.GaussianBlur(gray, (5, 5), 0)
+        _, black_mask = cv2.threshold(blur, CONFIG["camera"]["black_threshold"], 255, cv2.THRESH_BINARY_INV)
+        red_mask = cv2.bitwise_or(
+            cv2.inRange(hsv, self.red_lower_1, self.red_upper_1),
+            cv2.inRange(hsv, self.red_lower_2, self.red_upper_2),
+        )
+
+        kernel = np.ones((5, 5), np.uint8)
+        black_mask = cv2.morphologyEx(black_mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+        black_mask = cv2.morphologyEx(black_mask, cv2.MORPH_CLOSE, kernel)
+        red_mask = cv2.morphologyEx(red_mask, cv2.MORPH_OPEN, kernel)
+        red_mask = cv2.morphologyEx(red_mask, cv2.MORPH_CLOSE, kernel)
+        black_mask[red_mask > 0] = 0
+
+        view = WorldView(warped=warped, black_mask=black_mask, red_mask=red_mask)
+        self._fill_line(view)
+        self._fill_red_line(view)
+        if draw_debug:
+            self._draw_debug(view)
+        return view
+
+    def _fill_line(self, view: WorldView) -> None:
+        h, w = view.black_mask.shape[:2]
+        # Look ahead in the lower two thirds of the top-down world.
+        band = view.black_mask[int(h * 0.30):h, :]
+        contours, _ = cv2.findContours(band, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        valid = [c for c in contours if cv2.contourArea(c) >= CONFIG["camera"]["min_line_area"]]
+        if not valid:
+            return
+        contour = max(valid, key=cv2.contourArea)
+        M = cv2.moments(contour)
+        if M["m00"] <= 0:
+            return
+        cx = int(M["m10"] / M["m00"])
+        cy = int(M["m01"] / M["m00"]) + int(h * 0.30)
+        view.line_seen = True
+        view.line_center_x = cx
+        view.line_center_y = cy
+        view.error = (cx - (w / 2.0)) / max(1.0, w / 2.0)
+
+    def _fill_red_line(self, view: WorldView) -> None:
+        contours, _ = cv2.findContours(view.red_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        valid = []
+        for c in contours:
+            area = cv2.contourArea(c)
+            if area < CONFIG["camera"]["red_min_area"]:
+                continue
+            x, y, bw, bh = cv2.boundingRect(c)
+            if bw < view.red_mask.shape[1] * 0.18:
+                continue
+            valid.append((area, x, y, bw, bh))
+        if not valid:
+            return
+        area, _, y, _, bh = max(valid, key=lambda item: item[0])
+        view.red_line_seen = True
+        view.red_line_y = y + bh // 2
+        view.red_line_area = float(area)
+
+    def _draw_debug(self, view: WorldView) -> None:
+        if view.line_seen and view.line_center_x is not None and view.line_center_y is not None:
+            cv2.circle(view.warped, (view.line_center_x, view.line_center_y), 5, (255, 0, 0), -1)
+            cv2.line(view.warped, (view.line_center_x, view.line_center_y), (view.warped.shape[1] // 2, view.warped.shape[0] - 1), (255, 0, 0), 2)
+        if view.red_line_seen and view.red_line_y is not None:
+            cv2.line(view.warped, (0, view.red_line_y), (view.warped.shape[1] - 1, view.red_line_y), (0, 0, 255), 2)
+
+
+class ExpertWorldNavigator:
+    """Simple expert policy for top-down world navigation."""
+
+    def __init__(self, tunables: Tunables, motor: MotorDriver):
+        self.t = tunables
+        self.motor = motor
+        self.state = "WAIT_START_RED"
+        self.last_error = 0.0
+        self.integral = 0.0
+        self.last_time = time.perf_counter()
+        self.start_seen_time: Optional[float] = None
+        self.start_cleared = False
+        self.finish_min_time_s = 0.8
+
+    def update(self, view: WorldView, paused: bool = False) -> Tuple[float, float, str, float]:
+        now = time.perf_counter()
+        dt = max(0.001, now - self.last_time)
+        self.last_time = now
+
+        if paused:
+            self.motor.stop()
+            return 0.0, 0.0, "PAUSED", 0.0
+
+        if self.state == "WAIT_START_RED":
+            if view.red_line_seen:
+                self.start_seen_time = now
+                self.state = "START_RED_SEEN"
+                if self.motor.buzzer:
+                    self.motor.buzzer.pattern("red")
+            self.motor.stop()
+            return 0.0, 0.0, self.state, 0.0
+
+        if self.state == "START_RED_SEEN":
+            if not view.red_line_seen:
+                self.start_cleared = True
+                self.state = "NAVIGATE_WORLD"
+            else:
+                # Roll forward gently to clear the start red line.
+                left = right = self.t.min_speed
+                self.motor.set_speeds(left, right)
+                return left, right, self.state, 0.0
+
+        if self.state == "NAVIGATE_WORLD":
+            elapsed = now - (self.start_seen_time or now)
+            if view.red_line_seen and self.start_cleared and elapsed >= self.finish_min_time_s:
+                self.state = "STOP_FINISH_RED"
+                if self.motor.buzzer:
+                    self.motor.buzzer.pattern("red")
+                self.motor.stop()
+                return 0.0, 0.0, self.state, 0.0
+
+            if not view.line_seen:
+                direction = 1.0 if self.last_error >= 0 else -1.0
+                left = self.t.gap_sweep_speed * direction
+                right = -self.t.gap_sweep_speed * direction
+                self.motor.set_speeds(left, right)
+                return left, right, "WORLD_SEARCH", 0.0
+
+            error = clamp(view.error, -1.0, 1.0)
+            self.integral = clamp(self.integral + error * dt, -self.t.integral_limit, self.t.integral_limit)
+            derivative = (error - self.last_error) / dt
+            self.last_error = error
+            turn = clamp((self.t.kp * error) + (self.t.ki * self.integral) + (self.t.kd * derivative), -self.t.turn_limit, self.t.turn_limit)
+            speed = clamp(self.t.base_speed - self.t.speed_error_gain * abs(error), self.t.min_speed, self.t.max_speed)
+            left = clamp(speed + turn, -self.t.max_speed, self.t.max_speed)
+            right = clamp(speed - turn, -self.t.max_speed, self.t.max_speed)
+            self.motor.set_speeds(left, right)
+            return left, right, self.state, turn
+
+        self.motor.stop()
+        return 0.0, 0.0, self.state, 0.0
+
+
+# =============================================================================
 # TUNING UI
 # =============================================================================
 
@@ -1353,6 +1553,66 @@ def run_benchmark(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_world_model(args: argparse.Namespace) -> int:
+    tunables = Tunables()
+    motor = MotorDriver(dry_run=args.dry_run)
+    camera = CameraSource(camera_index=args.camera_index)
+    mapper = TopDownMapper(output_size=(args.world_size, args.world_size))
+    navigator = ExpertWorldNavigator(tunables, motor)
+    preview = args.preview
+    running = True
+
+    if motor.buzzer:
+        motor.buzzer.pattern("boot")
+
+    def _signal_stop(signum: int, frame: Any) -> None:
+        nonlocal running
+        running = False
+
+    signal.signal(signal.SIGINT, _signal_stop)
+    signal.signal(signal.SIGTERM, _signal_stop)
+
+    last_print = 0.0
+    try:
+        while running:
+            frame = camera.read()
+            if frame is None:
+                motor.stop()
+                time.sleep(0.02)
+                continue
+
+            view = mapper.process(frame, draw_debug=preview)
+            left, right, state, turn = navigator.update(view, paused=False)
+
+            now = time.perf_counter()
+            if now - last_print >= 0.25:
+                last_print = now
+                print(
+                    f"[World] {state} line={view.line_seen} red={view.red_line_seen} "
+                    f"err={view.error:+.3f} L/R={left:+.3f}/{right:+.3f} turn={turn:+.3f}"
+                )
+
+            if preview:
+                cv2.imshow("DPSI-LFR Top Down World", view.warped)
+                cv2.imshow("DPSI-LFR World Line Mask", view.black_mask)
+                cv2.imshow("DPSI-LFR World Red Mask", view.red_mask)
+                if cv2.waitKey(1) & 0xFF == ord("q"):
+                    running = False
+
+            if state == "STOP_FINISH_RED":
+                running = False
+    finally:
+        motor.stop()
+        if motor.buzzer:
+            motor.buzzer.pattern("stop")
+            time.sleep(0.20)
+        motor.close()
+        camera.close()
+        if preview:
+            cv2.destroyAllWindows()
+    return 0
+
+
 def run(args: argparse.Namespace) -> int:
     tunables = Tunables()
     tuning_path = Path(args.tuning_file).expanduser() if args.tuning_file else default_tuning_path()
@@ -1488,6 +1748,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--benchmark-frames", type=int, default=1000, help="Number of frames for --benchmark")
     parser.add_argument("--benchmark-require-100hz", action="store_true", help="Make --benchmark fail if synthetic loop rate is below 100 Hz")
     parser.add_argument("--report-file", help="Write JSON report for --self-test or --benchmark")
+    parser.add_argument("--world-model", action="store_true", help="Run top-down world mapper plus expert red-line-to-red-line navigator")
+    parser.add_argument("--world-size", type=int, default=320, help="Square output size for --world-model bird's-eye map")
     return parser
 
 
@@ -1499,6 +1761,8 @@ def main() -> int:
         return run_self_test(args)
     if args.benchmark:
         return run_benchmark(args)
+    if args.world_model:
+        return run_world_model(args)
     return run(args)
 
 
