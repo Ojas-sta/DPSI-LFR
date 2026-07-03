@@ -221,6 +221,12 @@ def main():
     assert args.benchmark
     assert args.report_file == "reports/benchmark.json"
 
+    args = build_arg_parser().parse_args(["--motor-only-test", "--motor-test-duty", "0.75", "--motor-test-seconds", "1.0"])
+    print("motor-parser", args.motor_only_test, args.motor_test_duty, args.motor_test_seconds)
+    assert args.motor_only_test
+    assert args.motor_test_duty == 0.75
+    assert args.motor_test_seconds == 1.0
+
     args = build_arg_parser().parse_args(["--world-model", "--dry-run", "--world-size", "240", "--world-display"])
     print("world-parser", args.world_model, args.dry_run, args.world_size, args.world_display)
     assert args.world_model

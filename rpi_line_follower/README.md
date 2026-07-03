@@ -216,6 +216,14 @@ Only after lifting the robot so the wheels cannot touch the mat, run the optiona
 dpsi-cli --self-test --motor-pulse-test
 ```
 
+If every other subsystem works but the motors do not move, skip camera/IMU checks and drive only the L298N pins from the README pinout:
+
+```bash
+dpsi-cli --motor-only-test --motor-test-duty 0.75 --motor-test-seconds 1.0
+```
+
+This pulses left, right, both forward, then both reverse, and stops the motors after each step.
+
 Save self-test evidence:
 
 ```bash

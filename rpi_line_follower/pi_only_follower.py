@@ -329,7 +329,7 @@ class MotorDriver:
         step = CONFIG["motor"]["slew_rate_per_sec"] * max(0.001, dt)
         return clamp(target, previous - step, previous + step)
 
-    def set_speeds(self, left: float, right: float) -> None:
+    def set_speeds(self, left: float, right: float, slew: bool = True) -> None:
         now = time.perf_counter()
         dt = now - self.last_update
         self.last_update = now
@@ -339,8 +339,11 @@ class MotorDriver:
         if CONFIG["motor"]["right_invert"]:
             right = -right
 
-        left = self._slew(clamp(left, -1.0, 1.0), self.last_left, dt)
-        right = self._slew(clamp(right, -1.0, 1.0), self.last_right, dt)
+        left = clamp(left, -1.0, 1.0)
+        right = clamp(right, -1.0, 1.0)
+        if slew:
+            left = self._slew(left, self.last_left, dt)
+            right = self._slew(right, self.last_right, dt)
         self.last_left, self.last_right = left, right
 
         if not self.available:
@@ -374,7 +377,7 @@ class MotorDriver:
         pwm.ChangeDutyCycle(abs(speed) * 100.0)
 
     def stop(self) -> None:
-        self.set_speeds(0.0, 0.0)
+        self.set_speeds(0.0, 0.0, slew=False)
 
     def close(self) -> None:
         try:
@@ -1442,13 +1445,15 @@ def run_self_test(args: argparse.Namespace) -> int:
             if args.dry_run or not motor.available:
                 status.append(("Motor pulse", False, "requires GPIO and no --dry-run"))
             else:
-                print("Pulsing motors at low power. Robot must be lifted off the mat.")
-                motor.set_speeds(0.24, 0.24)
-                time.sleep(0.25)
-                motor.set_speeds(-0.20, -0.20)
-                time.sleep(0.18)
+                duty = clamp(args.motor_test_duty, 0.05, 1.0)
+                duration = clamp(args.motor_test_seconds, 0.1, 3.0)
+                print(f"Pulsing motors at {duty * 100:.0f}% duty. Robot must be lifted off the mat.")
+                motor.set_speeds(duty, duty, slew=False)
+                time.sleep(duration)
+                motor.set_speeds(-duty, -duty, slew=False)
+                time.sleep(min(0.5, duration))
                 motor.stop()
-                status.append(("Motor pulse", True, "low-power forward/reverse pulse sent"))
+                status.append(("Motor pulse", True, f"{duty * 100:.0f}% forward/reverse pulse sent"))
         else:
             status.append(("Motor pulse", True, "skipped; add --motor-pulse-test when robot is lifted"))
 
@@ -1482,6 +1487,43 @@ def run_self_test(args: argparse.Namespace) -> int:
         write_json_report(target, report)
         print(f"Report written to {target}")
     return 0 if ok else 1
+
+
+def run_motor_only_test(args: argparse.Namespace) -> int:
+    pins = CONFIG["gpio_bcm"]
+    duty = clamp(args.motor_test_duty, 0.05, 1.0)
+    duration = clamp(args.motor_test_seconds, 0.1, 3.0)
+    motor = MotorDriver(dry_run=args.dry_run)
+
+    print("DPSI-LFR L298N motor-only test")
+    print(f"Dry-run GPIO: {args.dry_run}")
+    print("Using README BCM pinout:")
+    print(f"  Left:  ENA={pins['left_ena_pwm']} IN1={pins['left_in1']} IN2={pins['left_in2']}")
+    print(f"  Right: ENB={pins['right_ena_pwm']} IN3={pins['right_in3']} IN4={pins['right_in4']}")
+    print(f"Duty: {duty * 100:.0f}%  Step: {duration:.2f}s")
+
+    if args.dry_run or not motor.available:
+        print("GPIO unavailable or --dry-run set; no motor pins were driven.")
+        motor.close()
+        return 1 if not args.dry_run else 0
+
+    try:
+        for label, left, right in (
+            ("left forward", duty, 0.0),
+            ("right forward", 0.0, duty),
+            ("both forward", duty, duty),
+            ("both reverse", -duty, -duty),
+        ):
+            print(f"Pulse: {label}")
+            motor.set_speeds(left, right, slew=False)
+            time.sleep(duration)
+            motor.stop()
+            time.sleep(0.25)
+        print("Motor-only test complete.")
+        return 0
+    finally:
+        motor.stop()
+        motor.close()
 
 
 def _benchmark_frame(index: int) -> Any:
@@ -1748,7 +1790,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tuning-file", help="JSON tuning profile path (default: ~/.config/dpsi-lfr/tunables.json)")
     parser.add_argument("--save-on-exit", action="store_true", help="Write current PID/speed settings to the tuning file on exit")
     parser.add_argument("--self-test", action="store_true", help="Check GPIO, camera, vision, and IMU without starting autonomous driving")
-    parser.add_argument("--motor-pulse-test", action="store_true", help="During --self-test, briefly pulse motors at low power; lift robot first")
+    parser.add_argument("--motor-pulse-test", action="store_true", help="During --self-test, pulse motors; lift robot first")
+    parser.add_argument("--motor-only-test", action="store_true", help="Pulse only the L298N motor pins without camera/IMU checks; lift robot first")
+    parser.add_argument("--motor-test-duty", type=float, default=0.65, help="Motor test duty from 0.05 to 1.0")
+    parser.add_argument("--motor-test-seconds", type=float, default=0.8, help="Seconds per motor test pulse")
     parser.add_argument("--benchmark", action="store_true", help="Run synthetic no-GPIO vision/navigation loop benchmark")
     parser.add_argument("--benchmark-frames", type=int, default=1000, help="Number of frames for --benchmark")
     parser.add_argument("--benchmark-require-100hz", action="store_true", help="Make --benchmark fail if synthetic loop rate is below 100 Hz")
@@ -1765,6 +1810,8 @@ def main() -> int:
         CONFIG["camera"]["human_filter_enabled"] = False
     if args.self_test:
         return run_self_test(args)
+    if args.motor_only_test:
+        return run_motor_only_test(args)
     if args.benchmark:
         return run_benchmark(args)
     if args.world_model:

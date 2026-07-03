@@ -47,11 +47,14 @@ source "${VENV_DIR}/bin/activate"
 exec "${VENV_DIR}/bin/dpsi-cli" "\$@"
 EOF
 chmod +x "${USER_BIN_DIR}/dpsi-cli"
+if command -v sudo >/dev/null 2>&1; then
+  sudo install -m 0755 "${USER_BIN_DIR}/dpsi-cli" /usr/local/bin/dpsi-cli
+fi
 
 echo
 echo "Install complete."
 echo "Next commands on the Pi:"
-echo "  export PATH=\"${USER_BIN_DIR}:\$PATH\""
+echo "  dpsi-cli --help"
 echo "  python3 tests/smoke_pi_only.py"
 echo "  dpsi-cli --self-test --no-imu"
 echo "  dpsi-cli --self-test"
