@@ -7,6 +7,7 @@ This package drives the robot directly from the Raspberry Pi 4B:
 * MPU6050 yaw is used only as a secondary fallback during gaps and timed turns.
 * A threaded TUI/CLI lets you tune PID and speed constants live.
 * The camera is configured at 320x240 and targets 120 FPS for a fast control loop.
+* Optional human/person masking removes detected people from the vision ROI before line detection.
 
 ## Run
 
@@ -21,6 +22,7 @@ Useful options:
 ./dpsi-cli --preview
 ./dpsi-cli --camera-index 0
 ./dpsi-cli --mode final
+./dpsi-cli --no-human-filter
 ./dpsi-cli --tuning-file ~/.config/dpsi-lfr/tunables.json
 ./dpsi-cli --self-test --no-imu
 ./dpsi-cli --benchmark --benchmark-frames 1000
@@ -28,6 +30,8 @@ Useful options:
 ```
 
 Default mode is `prelim`, matching the annexure: green dot blinks the green LED and continues movement; red dot stops completely and blinks/beeps red feedback. `--mode final` enables deterministic green-marker turn decisions.
+
+Human masking uses OpenCV's built-in HOG person detector when available. Detected person boxes are padded and removed from the ROI before black-line, green-marker, and red-marker masks are calculated. If it causes false positives or lowers FPS on the Pi, run with `--no-human-filter`.
 
 ## Raspberry Pi Installation
 

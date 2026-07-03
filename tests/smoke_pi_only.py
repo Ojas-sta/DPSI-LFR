@@ -75,6 +75,15 @@ def main():
     assert result.line_seen
     assert abs(result.error) < 0.08
 
+    human_vision = VisionProcessor()
+    human_vision._human_frame_counter = 0
+    human_vision._detect_humans = lambda frame: [(134, 96, 52, 150)]
+    result = human_vision.process(make_frame(160))
+    print("human-mask", result.line_seen, len(result.human_detections), result.human_masked_area_px)
+    assert not result.line_seen
+    assert len(result.human_detections) == 1
+    assert result.human_masked_area_px > 0
+
     result = vision.process(make_parallel_frame())
     print("parallel", result.line_center_x, len(result.line_candidates), round(result.error, 3))
     assert result.line_seen

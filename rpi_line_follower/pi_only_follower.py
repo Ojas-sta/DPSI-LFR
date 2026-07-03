@@ -98,6 +98,11 @@ CONFIG: Dict[str, Any] = {
         "red_min_area": 120,
         "center_importance_strength": 0.62,
         "branch_min_length": 22,
+        "human_filter_enabled": True,
+        "human_detect_every_n_frames": 5,
+        "human_padding_px": 12,
+        "human_hog_hit_threshold": 0.0,
+        "human_hog_scale": 1.05,
         # Camera mounting recommendation for the current robot:
         # 18-25 degrees down from horizontal, lens 85-120 mm above the mat,
         # with the bottom of the image seeing about 60-90 mm in front of the
@@ -162,6 +167,7 @@ class Telemetry:
     marker: str = "NONE"
     line_candidate_count: int = 0
     intersection_branch_count: int = 0
+    human_detection_count: int = 0
     last_message: str = ""
     frame_shape: Tuple[int, int] = (0, 0)
     tunables_snapshot: Tunables = field(default_factory=Tunables)
@@ -506,6 +512,8 @@ class VisionResult:
     intersection: bool = False
     intersection_branch_count: int = 0
     line_candidates: List[LineCandidate] = field(default_factory=list)
+    human_detections: List[Tuple[int, int, int, int]] = field(default_factory=list)
+    human_masked_area_px: int = 0
     debug_frame: Optional[np.ndarray] = None
     mask_black: Optional[np.ndarray] = None
 
@@ -521,6 +529,17 @@ class VisionProcessor:
         self.red_lower_2 = np.array([165, 90, 80])
         self.red_upper_2 = np.array([180, 255, 255])
         self.black_threshold = cam["black_threshold"]
+        self.human_filter_enabled = bool(cam["human_filter_enabled"])
+        self._human_frame_counter = 0
+        self._last_human_boxes: List[Tuple[int, int, int, int]] = []
+        self._hog = None
+        if self.human_filter_enabled:
+            try:
+                self._hog = cv2.HOGDescriptor()
+                self._hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+            except Exception as exc:
+                print(f"[Vision] Human HOG detector unavailable; automatic human detection disabled: {exc}")
+                self._hog = None
 
     def process(self, frame: np.ndarray, draw_debug: bool = False) -> VisionResult:
         h, w = frame.shape[:2]
@@ -531,6 +550,13 @@ class VisionProcessor:
         roi = frame[y0:h, x0:x1]
         roi_h, roi_w = roi.shape[:2]
         debug = frame.copy() if draw_debug else None
+        result = VisionResult(debug_frame=debug)
+        human_mask = self._human_mask_for_roi(frame, x0, y0, x1, h, debug)
+        result.human_detections = list(self._last_human_boxes)
+        result.human_masked_area_px = int(np.count_nonzero(human_mask))
+        if result.human_masked_area_px > 0:
+            roi = roi.copy()
+            roi[human_mask > 0] = (255, 255, 255)
 
         hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
         green_mask = cv2.inRange(hsv, self.green_lower, self.green_upper)
@@ -553,7 +579,7 @@ class VisionProcessor:
         black_mask = cv2.morphologyEx(black_mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
         black_closed = cv2.morphologyEx(black_mask, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8))
 
-        result = VisionResult(debug_frame=debug, mask_black=black_closed)
+        result.mask_black = black_closed
         result.sensor_states = self._sensor_string(black_closed)
         center_x_global = x0 + roi_w // 2
         importance = self._importance_gradient(roi_h, roi_w)
@@ -621,7 +647,10 @@ class VisionProcessor:
             cv2.rectangle(debug, (x0, y0), (x1, h), (0, 255, 255), 1)
             cv2.putText(
                 debug,
-                f"{result.special_state} branches:{result.intersection_branch_count} candidates:{len(result.line_candidates)}",
+                (
+                    f"{result.special_state} branches:{result.intersection_branch_count} "
+                    f"candidates:{len(result.line_candidates)} humans:{len(result.human_detections)}"
+                ),
                 (8, 22),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.55,
@@ -629,6 +658,78 @@ class VisionProcessor:
                 2,
             )
         return result
+
+    def _human_mask_for_roi(
+        self,
+        frame: np.ndarray,
+        roi_x0: int,
+        roi_y0: int,
+        roi_x1: int,
+        roi_y1: int,
+        debug: Optional[np.ndarray],
+    ) -> np.ndarray:
+        mask = np.zeros((roi_y1 - roi_y0, roi_x1 - roi_x0), dtype=np.uint8)
+        if not self.human_filter_enabled:
+            return mask
+
+        every_n = max(1, int(CONFIG["camera"]["human_detect_every_n_frames"]))
+        if self._human_frame_counter % every_n == 0:
+            self._last_human_boxes = self._detect_humans(frame)
+        self._human_frame_counter += 1
+
+        pad = int(CONFIG["camera"]["human_padding_px"])
+        for x, y, bw, bh in self._last_human_boxes:
+            x0 = max(roi_x0, x - pad)
+            y0 = max(roi_y0, y - pad)
+            x1 = min(roi_x1, x + bw + pad)
+            y1 = min(roi_y1, y + bh + pad)
+            if x1 <= x0 or y1 <= y0:
+                continue
+            mask[y0 - roi_y0:y1 - roi_y0, x0 - roi_x0:x1 - roi_x0] = 255
+            if debug is not None:
+                cv2.rectangle(debug, (x0, y0), (x1, y1), (180, 0, 255), 2)
+                cv2.putText(debug, "HUMAN MASK", (x0, max(14, y0 - 4)), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (180, 0, 255), 1)
+        return mask
+
+    def _detect_humans(self, frame: np.ndarray) -> List[Tuple[int, int, int, int]]:
+        if self._hog is None:
+            return []
+        try:
+            boxes, weights = self._hog.detectMultiScale(
+                frame,
+                winStride=(8, 8),
+                padding=(8, 8),
+                scale=float(CONFIG["camera"]["human_hog_scale"]),
+                hitThreshold=float(CONFIG["camera"]["human_hog_hit_threshold"]),
+            )
+        except Exception as exc:
+            print(f"[Vision] Human detection failed, continuing without mask this frame: {exc}")
+            return []
+
+        if len(boxes) == 0:
+            return []
+        return self._non_max_suppress_boxes([(int(x), int(y), int(w), int(h)) for x, y, w, h in boxes])
+
+    def _non_max_suppress_boxes(self, boxes: List[Tuple[int, int, int, int]], overlap_threshold: float = 0.45) -> List[Tuple[int, int, int, int]]:
+        if not boxes:
+            return []
+        boxes_sorted = sorted(boxes, key=lambda box: box[2] * box[3], reverse=True)
+        kept: List[Tuple[int, int, int, int]] = []
+        for box in boxes_sorted:
+            if all(self._box_iou(box, other) < overlap_threshold for other in kept):
+                kept.append(box)
+        return kept
+
+    def _box_iou(self, a: Tuple[int, int, int, int], b: Tuple[int, int, int, int]) -> float:
+        ax0, ay0, aw, ah = a
+        bx0, by0, bw, bh = b
+        ax1, ay1 = ax0 + aw, ay0 + ah
+        bx1, by1 = bx0 + bw, by0 + bh
+        ix0, iy0 = max(ax0, bx0), max(ay0, by0)
+        ix1, iy1 = min(ax1, bx1), min(ay1, by1)
+        inter = max(0, ix1 - ix0) * max(0, iy1 - iy0)
+        union = aw * ah + bw * bh - inter
+        return inter / union if union > 0 else 0.0
 
     def _sensor_string(self, mask: np.ndarray, zones: int = 7) -> str:
         h, w = mask.shape[:2]
@@ -964,7 +1065,7 @@ class TuningInterface:
             stdscr.addstr(0, 0, "DPSI-LFR Pi-only Line Follower TUI")
             stdscr.addstr(2, 0, f"State: {tel.state}  Paused: {tel.paused}  Loop: {tel.loop_hz:6.1f} Hz  FPS: {tel.fps:5.1f}")
             stdscr.addstr(3, 0, f"Sensors: {tel.sensor_states}  Line: {tel.line_seen}  Marker: {tel.marker}")
-            stdscr.addstr(4, 0, f"Branches: {tel.intersection_branch_count}  Candidates: {tel.line_candidate_count}")
+            stdscr.addstr(4, 0, f"Branches: {tel.intersection_branch_count}  Candidates: {tel.line_candidate_count}  Humans masked: {tel.human_detection_count}")
             stdscr.addstr(5, 0, f"Error: {tel.error:+.3f}  PID: {tel.pid_output:+.3f}  PWM L/R: {tel.left_pwm:+.3f}/{tel.right_pwm:+.3f}")
             imu = "None" if tel.imu_heading_deg is None else f"{tel.imu_heading_deg:+.1f} deg"
             stdscr.addstr(6, 0, f"IMU: {imu}  OK: {tel.imu_ok}")
@@ -1334,6 +1435,7 @@ def run(args: argparse.Namespace) -> int:
                 telemetry.marker = marker
                 telemetry.line_candidate_count = len(result.line_candidates)
                 telemetry.intersection_branch_count = result.intersection_branch_count
+                telemetry.human_detection_count = len(result.human_detections)
                 telemetry.frame_shape = frame.shape[:2]
                 telemetry.tunables_snapshot = Tunables(**tunables.__dict__)
 
@@ -1376,6 +1478,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-tui", action="store_true", help="Disable curses TUI and use command CLI only")
     parser.add_argument("--headless", action="store_true", help="Disable all interactive tuning UI; useful for systemd services")
     parser.add_argument("--no-imu", action="store_true", help="Disable MPU6050 reads")
+    parser.add_argument("--no-human-filter", action="store_true", help="Disable automatic human/person ROI masking")
     parser.add_argument("--camera-index", type=int, default=0, help="cv2 camera index if Picamera2 is unavailable")
     parser.add_argument("--tuning-file", help="JSON tuning profile path (default: ~/.config/dpsi-lfr/tunables.json)")
     parser.add_argument("--save-on-exit", action="store_true", help="Write current PID/speed settings to the tuning file on exit")
@@ -1390,6 +1493,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = build_arg_parser().parse_args()
+    if args.no_human_filter:
+        CONFIG["camera"]["human_filter_enabled"] = False
     if args.self_test:
         return run_self_test(args)
     if args.benchmark:
