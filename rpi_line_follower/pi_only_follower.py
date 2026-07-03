@@ -1508,6 +1508,25 @@ def run_motor_only_test(args: argparse.Namespace) -> int:
         return 1 if not args.dry_run else 0
 
     try:
+        g = motor.gpio
+        g.output(pins["left_in1"], g.HIGH)
+        g.output(pins["left_in2"], g.LOW)
+        g.output(pins["right_in3"], g.HIGH)
+        g.output(pins["right_in4"], g.LOW)
+        time.sleep(0.05)
+        readback = {
+            "IN1": g.input(pins["left_in1"]),
+            "IN2": g.input(pins["left_in2"]),
+            "IN3": g.input(pins["right_in3"]),
+            "IN4": g.input(pins["right_in4"]),
+        }
+        if readback["IN1"] != 1 or readback["IN3"] != 1:
+            print("WARNING: direction pin readback does not match commanded HIGH levels.")
+            print(f"Readback: {readback}")
+            print("Check L298N logic power, common ground, and wiring to the README BCM pins.")
+        motor.stop()
+        time.sleep(0.15)
+
         for label, left, right in (
             ("left forward", duty, 0.0),
             ("right forward", 0.0, duty),
