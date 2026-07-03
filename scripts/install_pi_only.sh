@@ -38,10 +38,20 @@ source "${VENV_DIR}/bin/activate"
 python3 -m pip install --upgrade pip
 python3 -m pip install -e "${ROOT_DIR}[pi]"
 
+USER_BIN_DIR="${HOME}/.local/bin"
+mkdir -p "${USER_BIN_DIR}"
+cat > "${USER_BIN_DIR}/dpsi-cli" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+source "${VENV_DIR}/bin/activate"
+exec "${VENV_DIR}/bin/dpsi-cli" "\$@"
+EOF
+chmod +x "${USER_BIN_DIR}/dpsi-cli"
+
 echo
 echo "Install complete."
 echo "Next commands on the Pi:"
-echo "  source ${VENV_DIR}/bin/activate"
+echo "  export PATH=\"${USER_BIN_DIR}:\$PATH\""
 echo "  python3 tests/smoke_pi_only.py"
 echo "  dpsi-cli --self-test --no-imu"
 echo "  dpsi-cli --self-test"
