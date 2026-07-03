@@ -96,6 +96,8 @@ CONFIG: Dict[str, Any] = {
         "green_min_area": 80,
         "green_max_area": 5000,
         "red_min_area": 120,
+        "center_importance_strength": 0.62,
+        "branch_min_length": 22,
         # Camera mounting recommendation for the current robot:
         # 18-25 degrees down from horizontal, lens 85-120 mm above the mat,
         # with the bottom of the image seeing about 60-90 mm in front of the
@@ -158,6 +160,8 @@ class Telemetry:
     imu_heading_deg: Optional[float] = None
     imu_ok: bool = False
     marker: str = "NONE"
+    line_candidate_count: int = 0
+    intersection_branch_count: int = 0
     last_message: str = ""
     frame_shape: Tuple[int, int] = (0, 0)
     tunables_snapshot: Tunables = field(default_factory=Tunables)
@@ -478,6 +482,16 @@ class CameraSource:
 
 
 @dataclass
+class LineCandidate:
+    center_x: int
+    center_y: int
+    area: float
+    score: float
+    angle_deg: float
+    bbox: Tuple[int, int, int, int]
+
+
+@dataclass
 class VisionResult:
     line_seen: bool = False
     error: float = 0.0
@@ -490,6 +504,8 @@ class VisionResult:
     green_right: bool = False
     red_stop: bool = False
     intersection: bool = False
+    intersection_branch_count: int = 0
+    line_candidates: List[LineCandidate] = field(default_factory=list)
     debug_frame: Optional[np.ndarray] = None
     mask_black: Optional[np.ndarray] = None
 
@@ -540,7 +556,11 @@ class VisionProcessor:
         result = VisionResult(debug_frame=debug, mask_black=black_closed)
         result.sensor_states = self._sensor_string(black_closed)
         center_x_global = x0 + roi_w // 2
-        line_contour = self._find_line_contour(black_closed)
+        importance = self._importance_gradient(roi_h, roi_w)
+        candidates = self._rank_line_candidates(black_closed, importance)
+        result.line_candidates = [candidate for _, candidate in candidates]
+        result.intersection_branch_count = self._count_line_branches(black_closed)
+        line_contour = candidates[0][0] if candidates else None
 
         if line_contour is not None:
             M = cv2.moments(line_contour)
@@ -563,7 +583,12 @@ class VisionProcessor:
                     result.heading_vector = (vx_f, vy_f)
 
                 bbox_x, _, bbox_w, _ = cv2.boundingRect(line_contour)
-                result.intersection = bbox_w > roi_w * 0.70 or result.sensor_states.count("1") >= 5
+                result.intersection = (
+                    bbox_w > roi_w * 0.70
+                    or result.sensor_states.count("1") >= 5
+                    or result.intersection_branch_count >= 3
+                    or len(result.line_candidates) >= 2
+                )
                 if result.intersection:
                     result.special_state = "intersection"
 
@@ -571,8 +596,14 @@ class VisionProcessor:
                     cv2.drawContours(debug, [shifted], -1, (255, 120, 0), 2)
                     cv2.circle(debug, (result.line_center_x, result.line_center_y), 5, (0, 0, 255), -1)
                     cv2.line(debug, (center_x_global, y0), (center_x_global, h), (255, 0, 0), 1)
+                    for candidate in result.line_candidates[:4]:
+                        x, y, bw, bh = candidate.bbox
+                        cv2.rectangle(debug, (x + x0, y + y0), (x + x0 + bw, y + y0 + bh), (180, 180, 0), 1)
         else:
             result.special_state = "gap"
+            if result.intersection_branch_count >= 2:
+                result.intersection = True
+                result.special_state = "intersection"
 
         result.green_left, result.green_right = self._detect_green(green_mask, x0, center_x_global, debug)
         result.red_stop = self._detect_red(red_mask, debug, x0, y0)
@@ -588,7 +619,15 @@ class VisionProcessor:
 
         if draw_debug and debug is not None:
             cv2.rectangle(debug, (x0, y0), (x1, h), (0, 255, 255), 1)
-            cv2.putText(debug, result.special_state, (8, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 0), 2)
+            cv2.putText(
+                debug,
+                f"{result.special_state} branches:{result.intersection_branch_count} candidates:{len(result.line_candidates)}",
+                (8, 22),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.55,
+                (255, 255, 0),
+                2,
+            )
         return result
 
     def _sensor_string(self, mask: np.ndarray, zones: int = 7) -> str:
@@ -602,9 +641,20 @@ class VisionProcessor:
             chars.append("1" if density > 0.035 else "0")
         return "".join(chars)
 
-    def _find_line_contour(self, mask: np.ndarray) -> Optional[np.ndarray]:
+    def _importance_gradient(self, height: int, width: int) -> np.ndarray:
+        strength = CONFIG["camera"]["center_importance_strength"]
+        xs = np.linspace(-1.0, 1.0, width, dtype=np.float32)
+        center_weight = 1.0 - strength * np.abs(xs)
+        center_weight = np.clip(center_weight, 1.0 - strength, 1.0)
+
+        # Slightly favor the lower/near part of the ROI while keeping center bias dominant.
+        ys = np.linspace(0.78, 1.08, height, dtype=np.float32)
+        return ys[:, None] * center_weight[None, :]
+
+    def _rank_line_candidates(self, mask: np.ndarray, importance: np.ndarray) -> List[Tuple[np.ndarray, LineCandidate]]:
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        valid = []
+        ranked: List[Tuple[np.ndarray, LineCandidate]] = []
+        roi_center_x = mask.shape[1] / 2.0
         for c in contours:
             area = cv2.contourArea(c)
             if area < CONFIG["camera"]["min_line_area"]:
@@ -615,11 +665,69 @@ class VisionProcessor:
                 continue
             min_dim = min(rw, rh)
             max_dim = max(rw, rh)
-            if 2 <= min_dim <= 42 and max_dim >= 8:
-                valid.append(c)
-        if not valid:
-            return None
-        return max(valid, key=cv2.contourArea)
+            max_reasonable_line_width = max(58.0, min(mask.shape[:2]) * 0.75)
+            if not (2 <= min_dim <= max_reasonable_line_width and max_dim >= 8):
+                continue
+
+            M = cv2.moments(c)
+            if M["m00"] <= 0:
+                continue
+            cx = int(M["m10"] / M["m00"])
+            cy = int(M["m01"] / M["m00"])
+            x, y, bw, bh = cv2.boundingRect(c)
+            contour_mask = np.zeros(mask.shape, dtype=np.uint8)
+            cv2.drawContours(contour_mask, [c], -1, 255, -1)
+            weighted_pixels = importance[contour_mask > 0]
+            importance_mean = float(weighted_pixels.mean()) if weighted_pixels.size else 0.0
+            centeredness = 1.0 - min(1.0, abs(cx - roi_center_x) / max(1.0, roi_center_x))
+            score = area * (0.45 + importance_mean) * (0.65 + 0.35 * centeredness)
+            angle = self._contour_angle_deg(c)
+            candidate = LineCandidate(
+                center_x=cx,
+                center_y=cy,
+                area=float(area),
+                score=float(score),
+                angle_deg=angle,
+                bbox=(x, y, bw, bh),
+            )
+            ranked.append((c, candidate))
+
+        ranked.sort(key=lambda item: item[1].score, reverse=True)
+        return ranked
+
+    def _find_line_contour(self, mask: np.ndarray) -> Optional[np.ndarray]:
+        importance = self._importance_gradient(mask.shape[0], mask.shape[1])
+        ranked = self._rank_line_candidates(mask, importance)
+        return ranked[0][0] if ranked else None
+
+    def _contour_angle_deg(self, contour: np.ndarray) -> float:
+        if len(contour) < 2:
+            return 0.0
+        vx, vy, _, _ = cv2.fitLine(contour, cv2.DIST_L2, 0, 0.01, 0.01)
+        return float(math.degrees(math.atan2(float(vy.item()), float(vx.item()))))
+
+    def _count_line_branches(self, mask: np.ndarray) -> int:
+        min_len = CONFIG["camera"]["branch_min_length"]
+        lines = cv2.HoughLinesP(
+            mask,
+            rho=1,
+            theta=np.pi / 180,
+            threshold=18,
+            minLineLength=min_len,
+            maxLineGap=9,
+        )
+        if lines is None:
+            return 0
+
+        angle_bins = set()
+        for line in lines.reshape(-1, 4):
+            x1, y1, x2, y2 = [int(v) for v in line]
+            length = math.hypot(x2 - x1, y2 - y1)
+            if length < min_len:
+                continue
+            angle = (math.degrees(math.atan2(y2 - y1, x2 - x1)) + 180.0) % 180.0
+            angle_bins.add(int(round(angle / 18.0)) * 18)
+        return len(angle_bins)
 
     def _detect_green(self, mask: np.ndarray, x_offset: int, line_x: int, debug: Optional[np.ndarray]) -> Tuple[bool, bool]:
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -856,13 +964,14 @@ class TuningInterface:
             stdscr.addstr(0, 0, "DPSI-LFR Pi-only Line Follower TUI")
             stdscr.addstr(2, 0, f"State: {tel.state}  Paused: {tel.paused}  Loop: {tel.loop_hz:6.1f} Hz  FPS: {tel.fps:5.1f}")
             stdscr.addstr(3, 0, f"Sensors: {tel.sensor_states}  Line: {tel.line_seen}  Marker: {tel.marker}")
-            stdscr.addstr(4, 0, f"Error: {tel.error:+.3f}  PID: {tel.pid_output:+.3f}  PWM L/R: {tel.left_pwm:+.3f}/{tel.right_pwm:+.3f}")
+            stdscr.addstr(4, 0, f"Branches: {tel.intersection_branch_count}  Candidates: {tel.line_candidate_count}")
+            stdscr.addstr(5, 0, f"Error: {tel.error:+.3f}  PID: {tel.pid_output:+.3f}  PWM L/R: {tel.left_pwm:+.3f}/{tel.right_pwm:+.3f}")
             imu = "None" if tel.imu_heading_deg is None else f"{tel.imu_heading_deg:+.1f} deg"
-            stdscr.addstr(5, 0, f"IMU: {imu}  OK: {tel.imu_ok}")
+            stdscr.addstr(6, 0, f"IMU: {imu}  OK: {tel.imu_ok}")
             t = tel.tunables_snapshot
-            stdscr.addstr(7, 0, f"Kp z/x: {t.kp:.4f}  Ki a/s: {t.ki:.5f}  Kd c/v: {t.kd:.4f}")
-            stdscr.addstr(8, 0, f"Base [/]: {t.base_speed:.3f}  Max -/+: {t.max_speed:.3f}  Min: {t.min_speed:.3f}")
-            stdscr.addstr(9, 0, f"Mode m: {t.marker_mode}  Green turns: {t.green_turns_enabled}  Red stop: {t.red_stop_enabled}")
+            stdscr.addstr(8, 0, f"Kp z/x: {t.kp:.4f}  Ki a/s: {t.ki:.5f}  Kd c/v: {t.kd:.4f}")
+            stdscr.addstr(9, 0, f"Base [/]: {t.base_speed:.3f}  Max -/+: {t.max_speed:.3f}  Min: {t.min_speed:.3f}")
+            stdscr.addstr(10, 0, f"Mode m: {t.marker_mode}  Green turns: {t.green_turns_enabled}  Red stop: {t.red_stop_enabled}")
             stdscr.addstr(11, 0, "Keys: space pause/run | q quit | w save | l load | m prelim/final | g green turns | r red stop")
             stdscr.addstr(12, 0, f"Tuning file: {self.tuning_path}")
             stdscr.addstr(13, 0, tel.last_message[:100])
@@ -1223,6 +1332,8 @@ def run(args: argparse.Namespace) -> int:
                 telemetry.imu_heading_deg = heading
                 telemetry.imu_ok = imu_ok
                 telemetry.marker = marker
+                telemetry.line_candidate_count = len(result.line_candidates)
+                telemetry.intersection_branch_count = result.intersection_branch_count
                 telemetry.frame_shape = frame.shape[:2]
                 telemetry.tunables_snapshot = Tunables(**tunables.__dict__)
 

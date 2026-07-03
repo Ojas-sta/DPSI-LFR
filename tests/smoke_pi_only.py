@@ -51,6 +51,20 @@ def make_frame(line_x=None, green=None, red=False):
     return frame
 
 
+def make_parallel_frame():
+    frame = np.full((240, 320, 3), 255, dtype=np.uint8)
+    cv2.line(frame, (78, 112), (78, 239), (0, 0, 0), 14)
+    cv2.line(frame, (160, 112), (160, 239), (0, 0, 0), 14)
+    return frame
+
+
+def make_intersection_frame():
+    frame = np.full((240, 320, 3), 255, dtype=np.uint8)
+    cv2.line(frame, (160, 105), (160, 239), (0, 0, 0), 14)
+    cv2.line(frame, (62, 175), (258, 175), (0, 0, 0), 14)
+    return frame
+
+
 def main():
     vision = VisionProcessor()
     motor = MotorDriver(dry_run=True)
@@ -61,6 +75,18 @@ def main():
     assert result.line_seen
     assert abs(result.error) < 0.08
 
+    result = vision.process(make_parallel_frame())
+    print("parallel", result.line_center_x, len(result.line_candidates), round(result.error, 3))
+    assert result.line_seen
+    assert len(result.line_candidates) >= 2
+    assert abs(result.line_center_x - 160) <= 10
+
+    result = vision.process(make_intersection_frame())
+    print("intersection", result.intersection, result.intersection_branch_count, result.special_state)
+    assert result.intersection
+    assert result.intersection_branch_count >= 2
+
+    result = vision.process(make_frame(160))
     nav = Navigator(Tunables(), motor)
     left, right, state, turn = nav.update(result, None)
     print("follow", round(left, 3), round(right, 3), state, round(turn, 3))
