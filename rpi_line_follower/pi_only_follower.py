@@ -1219,7 +1219,39 @@ class ExpertWorldNavigator:
 # =============================================================================
 
 
+def load_ascii_banner() -> List[str]:
+    """Load the repo's ascii-art.txt banner, trimmed of blank border lines."""
+    candidates = [
+        Path(__file__).resolve().parent.parent / "ascii-art.txt",
+        Path.cwd() / "ascii-art.txt",
+    ]
+    for candidate in candidates:
+        try:
+            if candidate.is_file():
+                lines = candidate.read_text(encoding="utf-8").splitlines()
+                while lines and not lines[0].strip():
+                    lines.pop(0)
+                while lines and not lines[-1].strip():
+                    lines.pop()
+                if lines:
+                    return [line.rstrip() for line in lines]
+        except Exception:
+            continue
+    return []
+
+
 class TuningInterface:
+    # Claude Code-style palette: coral accent, violet/blue support, status colors.
+    _PAIR_ACCENT = 1
+    _PAIR_GOOD = 2
+    _PAIR_BAD = 3
+    _PAIR_WARN = 4
+    _PAIR_INFO = 5
+    _PAIR_SELECTED = 6
+    _PAIR_DIM = 7
+    _PAIR_ACCENT2 = 8
+    _BANNER_PAIRS = (1, 8, 5, 4, 2)
+
     def __init__(
         self,
         tunables: Tunables,
@@ -1234,6 +1266,10 @@ class TuningInterface:
         self.tuning_path = tuning_path
         self.use_curses = use_curses and sys.stdin.isatty() and sys.stdout.isatty()
         self.thread: Optional[threading.Thread] = None
+        self.banner = load_ascii_banner()
+        self.rows: List[Dict[str, Any]] = []
+        self.selected = 0
+        self._colors_ready = False
 
     def start(self) -> None:
         target = self._curses_loop if self.use_curses else self._command_loop
@@ -1254,10 +1290,240 @@ class TuningInterface:
     def _curses_loop(self) -> None:
         curses.wrapper(self._curses_main)
 
+    def _init_colors(self) -> None:
+        if self._colors_ready or not curses.has_colors():
+            self._colors_ready = True
+            return
+        curses.start_color()
+        try:
+            curses.use_default_colors()
+            bg = -1
+        except Exception:
+            bg = curses.COLOR_BLACK
+        curses.init_pair(self._PAIR_ACCENT, curses.COLOR_MAGENTA, bg)
+        curses.init_pair(self._PAIR_GOOD, curses.COLOR_GREEN, bg)
+        curses.init_pair(self._PAIR_BAD, curses.COLOR_RED, bg)
+        curses.init_pair(self._PAIR_WARN, curses.COLOR_YELLOW, bg)
+        curses.init_pair(self._PAIR_INFO, curses.COLOR_CYAN, bg)
+        curses.init_pair(self._PAIR_SELECTED, curses.COLOR_BLACK, curses.COLOR_CYAN)
+        curses.init_pair(self._PAIR_DIM, curses.COLOR_WHITE, bg)
+        curses.init_pair(self._PAIR_ACCENT2, curses.COLOR_BLUE, bg)
+        self._colors_ready = True
+
+    def _color(self, pair: int, extra: int = 0) -> int:
+        if not curses.has_colors():
+            return extra
+        return curses.color_pair(pair) | extra
+
+    def _safe_addstr(self, stdscr: Any, y: int, x: int, text: str, attr: int = 0) -> None:
+        max_y, max_x = stdscr.getmaxyx()
+        if y < 0 or y >= max_y or x >= max_x:
+            return
+        clipped = text[: max(0, max_x - x - 1)]
+        if not clipped:
+            return
+        try:
+            stdscr.addstr(y, x, clipped, attr)
+        except curses.error:
+            pass
+
+    def _build_rows(self) -> None:
+        t = self.t
+
+        def clamp_field(attr: str, low: float, high: Optional[float] = None):
+            def adjust(step: float) -> None:
+                value = getattr(t, attr) + step
+                if high is not None:
+                    value = min(high, value)
+                setattr(t, attr, max(low, value))
+            return adjust
+
+        self.rows = [
+            {
+                "label": "Kp (proportional)", "kind": "float", "fmt": "{:.4f}",
+                "get": lambda: t.kp, "adjust": clamp_field("kp", 0.0), "step": 0.02,
+                "keys": "z/x or ←/→",
+            },
+            {
+                "label": "Ki (integral)", "kind": "float", "fmt": "{:.5f}",
+                "get": lambda: t.ki, "adjust": clamp_field("ki", 0.0), "step": 0.001,
+                "keys": "a/s or ←/→",
+            },
+            {
+                "label": "Kd (derivative)", "kind": "float", "fmt": "{:.4f}",
+                "get": lambda: t.kd, "adjust": clamp_field("kd", 0.0), "step": 0.01,
+                "keys": "c/v or ←/→",
+            },
+            {
+                "label": "Base speed", "kind": "float", "fmt": "{:.3f}",
+                "get": lambda: t.base_speed, "adjust": clamp_field("base_speed", 0.0, 1.0), "step": 0.02,
+                "keys": "[/] or ←/→",
+            },
+            {
+                "label": "Max speed", "kind": "float", "fmt": "{:.3f}",
+                "get": lambda: t.max_speed,
+                "adjust": lambda step: setattr(
+                    t, "max_speed", clamp(t.max_speed + step, t.min_speed, 1.0)
+                ),
+                "step": 0.02, "keys": "-/+ or ←/→",
+            },
+            {
+                "label": "Marker mode", "kind": "enum", "values": ("prelim", "final"),
+                "get": lambda: t.marker_mode, "toggle": self._toggle_marker_mode,
+                "keys": "m or ←/→",
+            },
+            {
+                "label": "Green turns", "kind": "bool",
+                "get": lambda: t.green_turns_enabled,
+                "toggle": lambda: setattr(t, "green_turns_enabled", not t.green_turns_enabled),
+                "keys": "g or ←/→",
+            },
+            {
+                "label": "Red stop", "kind": "bool",
+                "get": lambda: t.red_stop_enabled,
+                "toggle": lambda: setattr(t, "red_stop_enabled", not t.red_stop_enabled),
+                "keys": "r or ←/→",
+            },
+            {
+                "label": "Pause / Run", "kind": "action",
+                "action": lambda: setattr(self.telemetry, "paused", not self.telemetry.paused),
+                "keys": "space or Enter",
+            },
+            {
+                "label": "Save tuning", "kind": "action", "action": self._save_current,
+                "keys": "w or Enter",
+            },
+            {
+                "label": "Load tuning", "kind": "action", "action": self._load_current,
+                "keys": "l or Enter",
+            },
+            {
+                "label": "Quit", "kind": "action",
+                "action": lambda: setattr(self.telemetry, "running", False),
+                "keys": "q or Enter",
+            },
+        ]
+
+    def _toggle_marker_mode(self) -> None:
+        self.t.marker_mode = "final" if self.t.marker_mode == "prelim" else "prelim"
+        self.t.green_turns_enabled = self.t.marker_mode == "final"
+
+    def _adjust_selected(self, direction: int) -> None:
+        if not self.rows:
+            return
+        row = self.rows[self.selected]
+        kind = row["kind"]
+        if kind == "float":
+            row["adjust"](direction * row["step"])
+        elif kind in ("bool", "enum"):
+            row["toggle"]()
+        elif kind == "action":
+            row["action"]()
+
+    def _activate_selected(self) -> None:
+        if not self.rows:
+            return
+        row = self.rows[self.selected]
+        if row["kind"] == "action":
+            row["action"]()
+        elif row["kind"] in ("bool", "enum"):
+            row["toggle"]()
+
+    def _draw_banner(self, stdscr: Any, y: int, max_x: int) -> int:
+        for i, line in enumerate(self.banner):
+            pair = self._BANNER_PAIRS[i % len(self._BANNER_PAIRS)]
+            x = max(0, (max_x - len(line)) // 2)
+            self._safe_addstr(stdscr, y, x, line, self._color(pair, curses.A_BOLD))
+            y += 1
+        return y
+
+    def _draw_titlebar(self, stdscr: Any, y: int, max_x: int, tel: "Telemetry") -> int:
+        title = " DPSI-LFR · Pi-Only Line Follower "
+        self._safe_addstr(stdscr, y, 0, title, self._color(self._PAIR_ACCENT, curses.A_BOLD | curses.A_REVERSE))
+        if tel.paused:
+            pill, pair = " PAUSED ", self._PAIR_WARN
+        elif tel.state in ("STOP_RED",):
+            pill, pair = " STOPPED ", self._PAIR_BAD
+        elif tel.state == "CAMERA_LOST":
+            pill, pair = " CAMERA LOST ", self._PAIR_BAD
+        else:
+            pill, pair = " RUNNING ", self._PAIR_GOOD
+        self._safe_addstr(stdscr, y, len(title) + 1, pill, self._color(pair, curses.A_BOLD | curses.A_REVERSE))
+        self._safe_addstr(stdscr, y + 1, 0, "─" * max(1, min(max_x - 1, 78)), self._color(self._PAIR_ACCENT2))
+        return y + 2
+
+    def _draw_telemetry(self, stdscr: Any, top: int, x: int, width: int, max_y: int, tel: "Telemetry") -> int:
+        y = top
+        self._safe_addstr(stdscr, y, x, "TELEMETRY", self._color(self._PAIR_INFO, curses.A_BOLD | curses.A_UNDERLINE))
+        y += 1
+        line_pair = self._PAIR_GOOD if tel.line_seen else self._PAIR_BAD
+        state_pair = {
+            "FOLLOW": self._PAIR_GOOD,
+            "STOP_RED": self._PAIR_BAD,
+            "CAMERA_LOST": self._PAIR_BAD,
+            "PAUSED": self._PAIR_WARN,
+        }.get(tel.state, self._PAIR_WARN)
+        rows = [
+            ("State", tel.state, state_pair),
+            ("Loop / FPS", f"{tel.loop_hz:6.1f} Hz  /  {tel.fps:5.1f} fps", self._PAIR_INFO),
+            ("Line seen", str(tel.line_seen), line_pair),
+            ("Sensors", tel.sensor_states, self._PAIR_INFO),
+            ("Marker", tel.marker, self._PAIR_WARN if tel.marker != "NONE" else self._PAIR_DIM),
+            ("Branches / Cand.", f"{tel.intersection_branch_count} / {tel.line_candidate_count}", self._PAIR_DIM),
+            ("Humans masked", str(tel.human_detection_count), self._PAIR_DIM),
+            ("Error", f"{tel.error:+.3f}", self._PAIR_INFO),
+            ("PID out", f"{tel.pid_output:+.3f}", self._PAIR_INFO),
+            ("PWM L / R", f"{tel.left_pwm:+.3f} / {tel.right_pwm:+.3f}", self._PAIR_ACCENT2),
+            (
+                "IMU heading",
+                ("n/a" if tel.imu_heading_deg is None else f"{tel.imu_heading_deg:+.1f} deg")
+                + ("  ok" if tel.imu_ok else "  down"),
+                self._PAIR_GOOD if tel.imu_ok else self._PAIR_DIM,
+            ),
+        ]
+        for label, value, pair in rows:
+            if y >= max_y - 1:
+                break
+            self._safe_addstr(stdscr, y, x, f"{label:<18}", self._color(self._PAIR_DIM, curses.A_DIM))
+            self._safe_addstr(stdscr, y, x + 19, value, self._color(pair, curses.A_BOLD))
+            y += 1
+        return y
+
+    def _draw_menu(self, stdscr: Any, top: int, x: int, width: int, max_y: int, tel: "Telemetry") -> int:
+        y = top
+        self._safe_addstr(stdscr, y, x, "TUNABLES  (↑/↓ select · ←/→ adjust · Enter act)", self._color(self._PAIR_INFO, curses.A_BOLD | curses.A_UNDERLINE))
+        y += 1
+        for i, row in enumerate(self.rows):
+            if y >= max_y - 1:
+                break
+            selected = i == self.selected
+            base_attr = self._color(self._PAIR_SELECTED, curses.A_BOLD) if selected else self._color(self._PAIR_DIM)
+            marker = "▸ " if selected else "  "
+            if row["kind"] == "float":
+                value = row["fmt"].format(row["get"]())
+            elif row["kind"] == "bool":
+                value = "ON" if row["get"]() else "off"
+            elif row["kind"] == "enum":
+                value = row["get"]()
+            else:
+                value = ""
+            text = f"{marker}{row['label']:<18} {value}"
+            self._safe_addstr(stdscr, y, x, text.ljust(max(0, width)), base_attr)
+            y += 1
+        return y
+
+    def _draw_footer(self, stdscr: Any, y: int, max_x: int) -> None:
+        self._safe_addstr(stdscr, y - 1, 0, "─" * max(1, min(max_x - 1, 78)), self._color(self._PAIR_ACCENT2))
+        hints = "↑↓ navigate   ←→ adjust   space pause/run   w save   l load   m mode   q quit"
+        self._safe_addstr(stdscr, y, 0, hints, self._color(self._PAIR_DIM, curses.A_DIM))
+
     def _curses_main(self, stdscr: Any) -> None:
         curses.curs_set(0)
+        stdscr.keypad(True)
         stdscr.nodelay(True)
         stdscr.timeout(100)
+        self._init_colors()
+        self._build_rows()
         while self.telemetry.running:
             key = stdscr.getch()
             if key != -1:
@@ -1265,23 +1531,45 @@ class TuningInterface:
             with self.lock:
                 tel = Telemetry(**self.telemetry.__dict__)
             stdscr.erase()
-            stdscr.addstr(0, 0, "DPSI-LFR Pi-only Line Follower TUI")
-            stdscr.addstr(2, 0, f"State: {tel.state}  Paused: {tel.paused}  Loop: {tel.loop_hz:6.1f} Hz  FPS: {tel.fps:5.1f}")
-            stdscr.addstr(3, 0, f"Sensors: {tel.sensor_states}  Line: {tel.line_seen}  Marker: {tel.marker}")
-            stdscr.addstr(4, 0, f"Branches: {tel.intersection_branch_count}  Candidates: {tel.line_candidate_count}  Humans masked: {tel.human_detection_count}")
-            stdscr.addstr(5, 0, f"Error: {tel.error:+.3f}  PID: {tel.pid_output:+.3f}  PWM L/R: {tel.left_pwm:+.3f}/{tel.right_pwm:+.3f}")
-            imu = "None" if tel.imu_heading_deg is None else f"{tel.imu_heading_deg:+.1f} deg"
-            stdscr.addstr(6, 0, f"IMU: {imu}  OK: {tel.imu_ok}")
-            t = tel.tunables_snapshot
-            stdscr.addstr(8, 0, f"Kp z/x: {t.kp:.4f}  Ki a/s: {t.ki:.5f}  Kd c/v: {t.kd:.4f}")
-            stdscr.addstr(9, 0, f"Base [/]: {t.base_speed:.3f}  Max -/+: {t.max_speed:.3f}  Min: {t.min_speed:.3f}")
-            stdscr.addstr(10, 0, f"Mode m: {t.marker_mode}  Green turns: {t.green_turns_enabled}  Red stop: {t.red_stop_enabled}")
-            stdscr.addstr(11, 0, "Keys: space pause/run | q quit | w save | l load | m prelim/final | g green turns | r red stop")
-            stdscr.addstr(12, 0, f"Tuning file: {self.tuning_path}")
-            stdscr.addstr(13, 0, tel.last_message[:100])
+            max_y, max_x = stdscr.getmaxyx()
+            y = 0
+            if self.banner and max_y > len(self.banner) + 16 and max_x >= 60:
+                y = self._draw_banner(stdscr, y, max_x)
+                y += 1
+            y = self._draw_titlebar(stdscr, y, max_x, tel)
+            body_top = y
+            left_w = max(26, max_x * 45 // 100)
+            right_x = left_w + 2
+            right_w = max(20, max_x - right_x - 1)
+            y_left = self._draw_telemetry(stdscr, body_top, 0, left_w, max_y, tel)
+            y_right = self._draw_menu(stdscr, body_top, right_x, right_w, max_y, tel)
+            bottom = max(y_left, y_right) + 1
+            msg_y = min(bottom, max_y - 3)
+            self._safe_addstr(stdscr, msg_y, 0, f"Tuning file: {self.tuning_path}", self._color(self._PAIR_DIM, curses.A_DIM))
+            if tel.last_message:
+                self._safe_addstr(stdscr, msg_y + 1, 0, tel.last_message[:max(0, max_x - 1)], self._color(self._PAIR_ACCENT, curses.A_BOLD))
+            self._draw_footer(stdscr, max_y - 1, max_x)
             stdscr.refresh()
 
     def _handle_key(self, key: int) -> None:
+        if not self.rows:
+            self._build_rows()
+        if key in (curses.KEY_UP,):
+            self.selected = (self.selected - 1) % len(self.rows)
+            return
+        if key in (curses.KEY_DOWN,):
+            self.selected = (self.selected + 1) % len(self.rows)
+            return
+        if key in (curses.KEY_LEFT,):
+            self._adjust_selected(-1)
+            return
+        if key in (curses.KEY_RIGHT,):
+            self._adjust_selected(1)
+            return
+        if key in (10, 13, curses.KEY_ENTER):
+            self._activate_selected()
+            return
+
         ch = chr(key) if 0 <= key < 256 else ""
         if ch == "q":
             self.telemetry.running = False
@@ -1312,8 +1600,7 @@ class TuningInterface:
         elif ch == "r":
             self.t.red_stop_enabled = not self.t.red_stop_enabled
         elif ch == "m":
-            self.t.marker_mode = "final" if self.t.marker_mode == "prelim" else "prelim"
-            self.t.green_turns_enabled = self.t.marker_mode == "final"
+            self._toggle_marker_mode()
         elif ch == "w":
             self._save_current()
         elif ch == "l":
