@@ -12,72 +12,72 @@ The system spans 4 independent Linux processes. The OS kernel's Completely Fair 
 
 ```mermaid
 graph TB
-    subgraph Core_0 [CPU Core 0: High-Speed Line Vision]
-        P1(line_cam_proc.py)
-        P1_L1[Initialize Picamera2]
-        P1_L2[Read 448x252 @ 90FPS]
-        P1_L3[Numba @njit HSV Masking]
-        P1_L4[Extract 8 ROIs]
+    subgraph Core_0 ["CPU Core 0: High-Speed Line Vision"]
+        P1["line_cam_proc.py"]
+        P1_L1["Initialize Picamera2"]
+        P1_L2["Read 448x252 @ 90FPS"]
+        P1_L3["Numba @njit HSV Masking"]
+        P1_L4["Extract 8 ROIs"]
         
         P1 --> P1_L1 --> P1_L2 --> P1_L3 --> P1_L4
     end
 
-    subgraph Core_1 [CPU Core 1: Heavy Depth, AI & Sensors]
-        P2(realsense_proc.py)
-        P2_L1[Initialize D435i USB]
-        P2_L2[Wait For Frames: Depth, RGB, IMU]
-        P2_L3[10th Percentile Floor Subtraction]
-        P2_L4[Sensor Fusion (Pitch/Roll) & Odometry]
-        P2_L5[Evac Zone: OpenCV / YOLO]
+    subgraph Core_1 ["CPU Core 1: Heavy Depth, AI & Sensors"]
+        P2["realsense_proc.py"]
+        P2_L1["Initialize D435i USB"]
+        P2_L2["Wait For Frames: Depth, RGB, IMU"]
+        P2_L3["10th Percentile Floor Subtraction"]
+        P2_L4["Sensor Fusion (Pitch/Roll) & Odometry"]
+        P2_L5["Evac Zone: OpenCV / YOLO"]
         
         P2 --> P2_L1 --> P2_L2 --> P2_L3 --> P2_L4 --> P2_L5
     end
 
-    subgraph Zero_Copy_IPC [RAM: multiprocessing.shared_memory]
-        SHM1[(Line Error Vector Buffer)]
-        SHM2[(Depth Obstacle Buffer)]
-        SHM3[(IMU & Odometry Buffer)]
-        SHM4[(Evac Target Buffer)]
-        SHM5[(Motor Target RPM Buffer)]
+    subgraph Zero_Copy_IPC ["RAM: multiprocessing.shared_memory"]
+        SHM1["Line Error Vector Buffer"]
+        SHM2["Depth Obstacle Buffer"]
+        SHM3["IMU & Odometry Buffer"]
+        SHM4["Evac Target Buffer"]
+        SHM5["Motor Target RPM Buffer"]
     end
 
-    subgraph Core_2 [CPU Core 2: Kinematic Orchestrator]
-        P3(control_proc.py)
-        P3_L1[Read SHM Blocks Instantly]
-        P3_L2[State Machine: Track vs Evac vs Stop]
-        P3_L3[Runge-Kutta 4th Order Math]
-        P3_L4[Slew Limiter Filter]
+    subgraph Core_2 ["CPU Core 2: Kinematic Orchestrator"]
+        P3["control_proc.py"]
+        P3_L1["Read SHM Blocks Instantly"]
+        P3_L2["State Machine: Track vs Evac vs Stop"]
+        P3_L3["Runge-Kutta 4th Order Math"]
+        P3_L4["Slew Limiter Filter"]
         
         P3 --> P3_L1 --> P3_L2 --> P3_L3 --> P3_L4
     end
 
-    subgraph Core_3 [CPU Core 3: Comm IO & GUI]
-        P4(serial_io_proc.py)
-        P4_L1[Read Target RPM Buffer]
-        P4_L2[Build Binary Packet]
-        P4_L3[Write to ESP32 @ 115200]
+    subgraph Core_3 ["CPU Core 3: Comm IO & GUI"]
+        P4["serial_io_proc.py"]
+        P4_L1["Read Target RPM Buffer"]
+        P4_L2["Build Binary Packet"]
+        P4_L3["Write to ESP32 @ 115200"]
         
         P4 --> P4_L1 --> P4_L2 --> P4_L3
 
-        P5(gui_proc.py)
-        P5_L1[Read All SHM Buffers]
-        P5_L2[CustomTkinter Mainloop]
-        P5_L3[Render Gauges & Cameras]
+        P5["gui_proc.py"]
+        P5_L1["Read All SHM Buffers"]
+        P5_L2["CustomTkinter Mainloop"]
+        P5_L3["Render Gauges & Cameras"]
 
         P5 --> P5_L1 --> P5_L2 --> P5_L3
     end
 
     %% IPC Links
-    P1_L4 ==|Write (0.01ms)|==> SHM1
-    P2_L3 ==|Write (0.01ms)|==> SHM2
-    P2_L4 ==|Write (0.01ms)|==> SHM3
+    P1_L4 -->|"Write (0.01ms)"| SHM1
+    P2_L3 -->|"Write (0.01ms)"| SHM2
+    P2_L4 -->|"Write (0.01ms)"| SHM3
     
-    SHM1 ==|Read|==> P3_L1
-    SHM2 ==|Read|==> P3_L1
-    SHM3 ==|Read|==> P3_L1
+    SHM1 -->|"Read"| P3_L1
+    SHM2 -->|"Read"| P3_L1
+    SHM3 -->|"Read"| P3_L1
     
-    P3_L4 ==|Write|==> SHM4
-    SHM4 ==|Read|==> P4_L1
+    P3_L4 -->|"Write"| SHM4
+    SHM4 -->|"Read"| P4_L1
 ```
 
 ---
