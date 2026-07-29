@@ -18,6 +18,10 @@
 
 ## Task 2: Implement High-Speed Line Following
 - [ ] **Action**: Write the core logic for the 90 FPS line tracking.
+- Please explore the `architecture/` folder for our extensive, updated markdown documents featuring Mermaid diagrams and flowcharts:
+- [`architecture/system_architecture.md`](architecture/system_architecture.md): Hardware topology, UART Protocol, and Power Distribution.
+- [`architecture/software_architecture.md`](architecture/software_architecture.md): Multi-process OS layout and algorithm pipelines.
+- [`architecture/implementation_plan.md`](architecture/implementation_plan.md): The execution roadmap.
 - [ ] **Details**: Integrate the Pi Camera V3 using hardware ISP. Process the HSV masking to isolate the line and write the Error Vector into the `multiprocessing.shared_memory` (Zero-Copy IPC).
 - [ ] **Verification**: Tune the PID / RK4 parameters to achieve smooth, jitter-free high-speed tracking.
 
