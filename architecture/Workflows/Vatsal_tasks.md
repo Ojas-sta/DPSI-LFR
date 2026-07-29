@@ -27,7 +27,7 @@
 
 ## Task 4: Design and Build the Evacuation Zone Mechanism
 - [ ] **Action**: CAD, 3D Print, and construct the Evacuation Zone claw, servos, and storage compartment.
-- [ ] **Details**: Since this is a custom design, focus on the CAD modeling of a mechanism capable of grabbing the RoboCup rescue balls and storing them safely. 
+- [ ] **Details**: Since this is a custom design, Make **Shubham Sir**focus on the CAD modeling of a mechanism capable of grabbing the RoboCup rescue balls and storing them safely. 
 - [ ] **Verification**: Coordinate with **Shubham Sir** regarding the physical mounting of the mechanism onto the chassis. Ensure the weight distribution doesn't imbalance the differential drive.
 
 ## Task 5: Finalize LED and Buzzer Wiring Logic
