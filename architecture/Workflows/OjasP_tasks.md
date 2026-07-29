@@ -14,7 +14,7 @@
 ## Task 1: Environment Setup & Git Version Control
 - [ ] **Action**: Set up the Python virtual environment (`venv`) on the Raspberry Pi 4B.
 - [ ] **Details**: Ensure all dependencies (`numba`, `picamera2`, `opencv-python`, `pyrealsense2`, `customtkinter`) are installed inside the isolated environment.
-- [ ] **Verification**: Enforce proper Git version control. Use the `dpsi_lfr_v3` branch, create Pull Requests for major features, and document all commits clearly.
+- [ ] **Verification**: Enforce proper Git version control. Clone & Fork the `dpsi_lfr_v3` branch, create Pull Requests for major features, and document all commits clearly.
 
 ## Task 2: Implement High-Speed Line Following
 - [ ] **Action**: Write the core logic for the 90 FPS line tracking.
