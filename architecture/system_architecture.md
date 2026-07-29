@@ -23,9 +23,9 @@ flowchart TB
     subgraph High_Level_Compute [Main Brain: Raspberry Pi 4B]
         direction TB
         CORE1[CPU Core 0: Line Vision]
-        CORE2[CPU Core 1: Depth/AI Vision]
+        CORE2[CPU Core 1: Depth/IMU/VO/AI]
         CORE3[CPU Core 2: Kinematics/Control]
-        CORE4[CPU Core 3: Comm IO]
+        CORE4[CPU Core 3: Comm IO & GUI]
         RAM[(Shared Memory IPC)]
         CORE1 -.-> RAM
         CORE2 -.-> RAM
@@ -85,10 +85,10 @@ To prevent CPU saturation on the USB bus and ensure maximum framerates where it 
   - This low resolution allows the NumPy and OpenCV contour processing arrays to complete in `< 3 milliseconds` per frame, maintaining a consistent **90 FPS**.
 - **Scope**: Exclusively handles the extraction of the black line against the white floor, and green intersection markers. **It does not perform AI or evacuation zone operations.**
 
-### 2.2 Secondary Vision: Intel RealSense D435
-> **Mission Objective**: True 3D Physical Obstacle Detection & Evacuation Zone Object Segmentation.
+### 2.2 Secondary Vision & Sensors: Intel RealSense D435i
+> **Mission Objective**: 3D Obstacles, Evacuation Zone Alignment, IMU Sensor Fusion, and Visual Odometry.
 
-- **Hardware Layer**: Intel RealSense D435 Stereo Vision Camera.
+- **Hardware Layer**: Intel RealSense D435i Stereo Vision Camera (Built-in Bosch BMI085 IMU).
 - **Physical Interface**: High-Speed USB 3.0 Type-C.
 - **Resolution Matrix**: 
   - Depth Stream: `640 x 480` @ 30/60 FPS (Z16 format).
@@ -96,6 +96,7 @@ To prevent CPU saturation on the USB bus and ensure maximum framerates where it 
 - **Scope**: 
   1. **Trajectory Safety**: Continuously evaluates a geometric projection of the ground floor. Subtracts the floor depth to detect 3D vertical objects. It stops the robot (overriding the Pi Camera) if an object is within 15.0 cm (10th percentile closest algorithm).
   2. **Evacuation Zone Target Acquisition**: Uses the RGB stream to perform "Zero-Weight" OpenCV Specular Thresholding OR YOLO11-Nano Segmentation (`yolo11n-seg`) to align with silver and black victims/balls.
+  3. **Sensor Fusion & Odometry**: Reads the internal Gyro and Accel to compute Pitch/Roll for Slope Detection. Simultaneously computes Visual Odometry (spatial translation X/Y/Z) to assist navigation.
 
 ---
 

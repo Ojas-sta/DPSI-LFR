@@ -1,45 +1,58 @@
 # Goal Description
 
-Rewrite the Temuv2 software architecture to create **Temuv2.5 (Hybrid Overengineering)**. We will adopt the high-performance multi-process shared memory model from the *Overengineering-squared-RoboCup* repository while retaining the advanced RK4 trajectory kinematics and 3D obstacle avoidance from *TemuFollower*. 
+Rewrite the Temuv2 software architecture to create **Temuv2.5 (Hybrid Overengineering)**. We are adopting a 5-process shared memory model from *Overengineering-squared-RoboCup* while retaining the advanced RK4 (and RK15) kinematics and 3D obstacle avoidance from *TemuFollower*. 
 
-The objective is to achieve a 90 FPS line-tracking control loop on the Raspberry Pi 4B by bypassing the Python GIL, utilizing hardware CSI cameras purely for line-following, and offloading heavy 3D/AI processing and low-level control (driving 2x IBT_2 motor drivers) to other dedicated systems like the ESP32.
+The objective is to achieve a 90 FPS line-tracking control loop on the Raspberry Pi 4B. The architecture has now been expanded to include a **CustomTkinter GUI**, **RealSense IMU Sensor Fusion**, and **Slope Detection** for advanced terrain traversal.
 
 ## User Review Required
 
 > [!IMPORTANT]
-> Please review the completely updated and extensively diagrammed architectural documents I generated for you:
-> 1. [System Architecture](file:///Users/roopalisingh/.gemini/antigravity/brain/04f6bd6a-2915-4ad7-8cbb-75545ed09f2f/system_architecture.md) - Features hardware topology diagrams, communication sequencing, and power distribution models.
-> 2. [Software Architecture](file:///Users/roopalisingh/.gemini/antigravity/brain/04f6bd6a-2915-4ad7-8cbb-75545ed09f2f/software_architecture.md) - Details the 4-process OS layout with IPC shared memory graphs, the state machine flow, and algorithm pipelines.
+> The implementation plan below reflects the new additions you requested. Please review the "Proposed Changes" and "Open Questions" sections to ensure they match your expectations. If everything looks good, approve it and I will commit the architectural changes and restore the deprecated archive.
 
 ## Open Questions
 
 > [!NOTE]
-> 1. **Evacuation Zone Ball Detection**: In the software architecture, the RealSense now handles Evac Zone ball alignment. I proposed two options for ball alignment: "Zero-Weight" OpenCV Specular Thresholding OR YOLO11-Nano Segmentation. Do you have a preference for which one we should attempt first? OpenCV will be much faster to implement and run, while YOLO11n-seg is more robust to lighting changes.
-> 2. **Camera Hardware**: Do you currently have a Raspberry Pi Camera Module (CSI Ribbon) physically available to plug into the RPi 4B, or do we need to order one?
+> 1. **Sensor Fusion Math**: The RealSense D435i outputs raw Gyro and Accel data. Should we run a standard Madgwick filter inside `realsense_proc.py` to calculate the `[Pitch, Roll, Yaw]` Euler angles, and pass those floats to the `control_proc.py`? (Recommended: Yes, it offloads math from the control loop).
+> 2. **Slope Detection Reaction**: When the robot detects a ramp (e.g., Pitch > 15 degrees), should the `control_proc.py` automatically shift into a "High-Torque / Low-Speed" mode and temporarily disable aggressive RK4 turning to prevent slipping? (Recommended: Yes).
+> 3. **Deprecated Archive**: In our last git push, I permanently deleted the old unused files. Would you like me to `git revert` that commit to bring them back, and then neatly move them into a `deprecated_archive/` folder instead? (Recommended: Yes, to preserve history).
 
 ## Proposed Changes
 
-If approved, the execution phase will involve a massive restructuring of the Python codebase into discrete process modules.
+### Multiprocessing Framework (Zero-Copy IPC)
+#### [MODIFY] [mp_manager.py](file:///Users/roopalisingh/PycharmProjects/Temuv2/mp_manager.py)
+- Expand the fixed-size C-style float array to include IMU telemetry: `[LineError, LineAngle, DistanceToWall, BallX, BallY, Pitch, Roll, Yaw]`.
 
-### Multiprocessing Framework
-#### [NEW] [mp_manager.py](file:///Users/roopalisingh/PycharmProjects/Temuv2/mp_manager.py)
-Create a shared memory orchestrator to allocate zero-copy RAM buffers for sharing float arrays (line error, depth distances) between processes.
+### Vision & Sensor Processes
+#### [MODIFY] [realsense_proc.py](file:///Users/roopalisingh/PycharmProjects/Temuv2/realsense_proc.py)
+- **NEW**: Subscribe to the D435i's built-in IMU streams (Gyro and Accel).
+- **NEW**: Implement a sensor fusion algorithm (Complementary or Madgwick filter) to continuously compute the robot's Pitch and Roll angles in 3D space.
 
-### Vision Processes
 #### [NEW] [line_cam_proc.py](file:///Users/roopalisingh/PycharmProjects/Temuv2/line_cam_proc.py)
-Process using `Picamera2` at 448x252. Will extract 4-8 ROIs, compute centroids, and push the line vector to shared memory.
-#### [NEW] [realsense_proc.py](file:///Users/roopalisingh/PycharmProjects/Temuv2/realsense_proc.py)
-Process managing the Intel RealSense D435. Will run both the ground plane subtraction (Depth) and the Evacuation Zone ball detection logic (RGB).
+- Uses `Picamera2` at 448x252. Extracts 4-8 ROIs, computes centroids with Numba JIT.
+
+#### [NEW] [evac_cam_opencv.py](file:///Users/roopalisingh/PycharmProjects/Temuv2/evac_cam_opencv.py) & [evac_cam_yolo.py](file:///Users/roopalisingh/PycharmProjects/Temuv2/evac_cam_yolo.py)
+- Swappable modules for Evac Zone ball detection.
 
 ### Control & Communications
-#### [NEW] [control_proc.py](file:///Users/roopalisingh/PycharmProjects/Temuv2/control_proc.py)
-The central orchestrator. Reads from shared memory, runs RK4 integration and the Slew limiter, and computes final motor RPMs.
+#### [MODIFY] [control_proc.py](file:///Users/roopalisingh/PycharmProjects/Temuv2/control_proc.py)
+- **NEW**: Implement **Slope Detection** logic. If the Pitch from shared memory exceeds the ramp threshold, dynamically alter the motor mapping limits to prioritize traction and torque.
+- Implements both RK4 and RK15 integration modes.
+
 #### [NEW] [serial_io_proc.py](file:///Users/roopalisingh/PycharmProjects/Temuv2/serial_io_proc.py)
-Dedicated loop for constructing UART packets (`SOF 0xAA`) and writing to `/dev/ttyUSB0` at 115200+ baud.
+- Standard UART loop to the ESP32 and 2x IBT_2 drivers.
+
+### Graphical User Interface (5th Process)
+#### [NEW] [gui_proc.py](file:///Users/roopalisingh/PycharmProjects/Temuv2/gui_proc.py)
+- Build a sleek, modern UI using **CustomTkinter** (dark mode, rounded corners).
+- This process will read asynchronously from the `mp_manager` shared memory and display real-time gauges: Line Error, Obstacle Distance, IMU Pitch/Roll, and current State.
+- Because it is a separate OS process, the blocking `mainloop()` will not affect the 90 FPS control loop.
 
 ## Verification Plan
 
+### Automated Benchmarking
+- We will measure the latency difference between the OpenCV and YOLO11n Evac Zone pipelines.
+- Verify that `gui_proc.py` CPU usage stays below 20% on a single core.
+
 ### Manual Verification
-- Launch the multi-process stack on the RPi.
-- Verify using `htop` that the Python workload is distributed across all 4 CPU cores.
-- Verify that UART motor packets continue streaming smoothly at 60Hz+ even when the RealSense camera lags or blocks.
+- Physically tilt the robot and observe the CustomTkinter GUI displaying the IMU Pitch in real-time.
+- Confirm the motors automatically adjust their RPM profiles when a slope is detected.

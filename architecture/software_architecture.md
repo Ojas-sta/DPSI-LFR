@@ -22,21 +22,23 @@ graph TB
         P1 --> P1_L1 --> P1_L2 --> P1_L3 --> P1_L4
     end
 
-    subgraph Core_1 [CPU Core 1: Heavy Depth & AI Vision]
+    subgraph Core_1 [CPU Core 1: Heavy Depth, AI & Sensors]
         P2(realsense_proc.py)
-        P2_L1[Initialize Intel D435 USB]
-        P2_L2[Wait For Frames: Depth & RGB]
+        P2_L1[Initialize D435i USB]
+        P2_L2[Wait For Frames: Depth, RGB, IMU]
         P2_L3[10th Percentile Floor Subtraction]
-        P2_L4[Evac Zone: OpenCV Specular / YOLO]
+        P2_L4[Sensor Fusion (Pitch/Roll) & Odometry]
+        P2_L5[Evac Zone: OpenCV / YOLO]
         
-        P2 --> P2_L1 --> P2_L2 --> P2_L3 --> P2_L4
+        P2 --> P2_L1 --> P2_L2 --> P2_L3 --> P2_L4 --> P2_L5
     end
 
     subgraph Zero_Copy_IPC [RAM: multiprocessing.shared_memory]
         SHM1[(Line Error Vector Buffer)]
         SHM2[(Depth Obstacle Buffer)]
-        SHM3[(Evac Ball Target Buffer)]
-        SHM4[(Motor Target RPM Buffer)]
+        SHM3[(IMU & Odometry Buffer)]
+        SHM4[(Evac Target Buffer)]
+        SHM5[(Motor Target RPM Buffer)]
     end
 
     subgraph Core_2 [CPU Core 2: Kinematic Orchestrator]
@@ -49,13 +51,20 @@ graph TB
         P3 --> P3_L1 --> P3_L2 --> P3_L3 --> P3_L4
     end
 
-    subgraph Core_3 [CPU Core 3: Serial I/O]
+    subgraph Core_3 [CPU Core 3: Comm IO & GUI]
         P4(serial_io_proc.py)
         P4_L1[Read Target RPM Buffer]
         P4_L2[Build Binary Packet]
-        P4_L3[Write to /dev/ttyUSB0 @ 115200]
+        P4_L3[Write to ESP32 @ 115200]
         
         P4 --> P4_L1 --> P4_L2 --> P4_L3
+
+        P5(gui_proc.py)
+        P5_L1[Read All SHM Buffers]
+        P5_L2[CustomTkinter Mainloop]
+        P5_L3[Render Gauges & Cameras]
+
+        P5 --> P5_L1 --> P5_L2 --> P5_L3
     end
 
     %% IPC Links
@@ -103,6 +112,12 @@ This process handles computationally heavy tasks. It runs at a lower framerate (
 2. **Option 2 (YOLO11n-seg)**: We run a lightweight YOLO11-Nano semantic segmentation model. It draws bounding boxes and masks around "Dead Victim (Black)" and "Alive Victim (Silver)".
 3. We calculate the X-offset of the target ball from the center of the frame and write an "Alignment Error Vector" to shared memory.
 
+**C. IMU Sensor Fusion & Visual Odometry**:
+1. Reads Gyro/Accel data from the D435i IMU.
+2. Applies a Complementary/Madgwick filter to calculate `[Pitch, Roll]`.
+3. Processes Visual Odometry (spatial `X, Y, Z` translation) using RealSense tracking.
+4. Writes these values to the `multiprocessing.shared_memory` buffer so the Control process can detect slopes and the GUI can render them.
+
 ### 2.3 The Control & Kinematics Orchestrator (`control_proc.py`)
 This is the logical brain of the robot.
 
@@ -119,6 +134,13 @@ stateDiagram-v2
     LineFollowing --> ObstacleAvoidance : Depth < 15cm
     ObstacleAvoidance --> LineFollowing : Depth > 20cm
     
+    LineFollowing --> SlopeTraversing : Pitch > 15 deg
+    SlopeTraversing --> LineFollowing : Pitch < 5 deg
+    
+    state SlopeTraversing {
+        Disable_RK4 --> High_Torque_Medium_Speed
+    }
+
     LineFollowing --> EvacuationZone : Silver Strip Detected
     
     state EvacuationZone {
@@ -130,6 +152,13 @@ stateDiagram-v2
     EvacuationZone --> LineFollowing : Exit Marker Found
 ```
 
-1. **State Machine Execution**: Instantly reads the Line Vector, Obstacle Distance, and Ball Alignment from shared memory.
-2. **RK4 Numerical Integration**: Instead of simple Proportional steering, we use Runge-Kutta 4th Order math to mathematically predict the robot's smooth arc toward the line centroid over the `dt` timestep.
-3. **Slew Limiter**: A recursive filter algorithm restricts the maximum mathematical rate of change (acceleration) sent to the motors. This ensures the tires never lose static friction (slip) when the RK4 loop requests a sudden sharp turn on a 90-degree intersection.
+1. **State Machine Execution**: Instantly reads the Line Vector, Obstacle Distance, Pitch/Roll, and Ball Alignment from shared memory.
+2. **RK4 / RK15 Numerical Integration**: Instead of simple Proportional steering, we use Runge-Kutta math to mathematically predict the robot's smooth arc toward the line centroid over the `dt` timestep. Both RK4 and RK15 are supported and togglable.
+3. **Slope Handling**: If the IMU Pitch exceeds 15 degrees, it drops out of RK4 mode and shifts to a **High-Torque, Medium-Speed** mapping. This guarantees the robot traverses the ramp without tire slippage.
+4. **Slew Limiter**: A recursive filter algorithm restricts the maximum mathematical rate of change (acceleration) sent to the motors.
+
+### 2.4 The Graphical User Interface (`gui_proc.py`)
+To monitor the complex multi-processing architecture without affecting latency, the GUI is fully decoupled.
+1. **CustomTkinter**: A sleek, modern dark-mode GUI.
+2. **Zero Block**: Runs on a separate CPU core alongside the Serial I/O process.
+3. **Data Polling**: Periodically reads the `multiprocessing.shared_memory` to render the IMU Pitch gauges, Odometry graphs, Line Error vector, and RealSense visual streams.
