@@ -12,7 +12,7 @@
 ## Task 1: Procure the XL4016 Buck Converter
 - [ ] **Action**: Call or text the supplier at **+91 09818893668**.
 - [ ] **Details**: You need to acquire the XL4016 Buck Converter. Before finalizing the order, **coordinate strictly with OjasP and Shubham Sir** to ensure you are requesting the exact version and specifications required for the robot's power distribution.
-- [ ] **Verification**: Confirm with OjasP that the part ordered is the correct 8A/9A 300W version suitable for our motors.
+- [ ] **Verification**: Confirm with OjasP that the part ordered is the correct 8A/9A 300W version suitable for our servos.
 
 ## Task 2: Procure Pi Camera and Cable from Sujoy
 - [ ] **Action**: Contact Sujoy at **+91 9891195730**.
