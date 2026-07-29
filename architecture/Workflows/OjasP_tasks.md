@@ -8,6 +8,8 @@
 > - You are responsible for all soldering (assist Vatsal as needed).
 > - Keep all 3 teachers (Danna Ma'am, Shubham Sir, and Shashank Sir) updated on your progress.
 > - Utilize **Generative AI** throughout your coding sessions to optimize your workflows and debug faster.
+> - Document All Tasks.
+
 
 ---
 
