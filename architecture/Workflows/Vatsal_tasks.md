@@ -6,6 +6,7 @@
 > - For any **drastic changes**, you must also receive explicit approval from **Shubham Sir**.
 > - Keep all 3 teachers (Danna Ma'am, Shubham Sir, and Shashank Sir) updated on your progress throughout the day.
 > - All soldering must be done by **OjasP** or a teacher. Do not solder independently.
+> - Document All Tasks
 
 ---
 
