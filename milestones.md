@@ -1,18 +1,18 @@
-# Project Milestones
+# Project Milestones (Temuv2.5 Hybrid Overengineering)
 
-## 1st Milestone: Get Robot Moving
-- Finalize the laser cutting and physical assembly of the 3-layer chassis.
-- Mount the drive motors, casters, and RRC Lite Controller.
-- Establish micro-ROS communication between the Raspberry Pi 5 and the STM32.
-- Integrate the Tuvaro & RK4 logic to achieve basic, high-speed line following.
+## 1st Milestone: High-Speed Line Tracking Pipeline
+- Implement the `mp_manager.py` shared memory layer for zero-copy IPC.
+- Initialize `line_cam_proc.py` using Picamera2 and Numba JIT for 90 FPS ROI extraction.
+- Create `serial_io_proc.py` and the ESP32 UART firmware to safely drive the 2x IBT_2 motor drivers.
+- Implement the RK4 kinematics loop in `control_proc.py` for high-speed line following.
 
-## 2nd Milestone: Robotic Arm Moving
-- Mount the MeArm v1 to the front of Layer 2.
-- Wire the 4 micro-servos to the RRC Lite Controller.
-- Validate basic servo control through micro-ROS.
-- Implement MoveIt 2 for inverse kinematics and basic pick-and-place trajectories.
+## 2nd Milestone: RealSense Integration & Obstacles
+- Implement `realsense_proc.py` to stream Depth and RGB.
+- Enable 10th percentile floor subtraction for physical 3D obstacle avoidance.
+- Write the sensor fusion logic (IMU Gyro/Accel) to compute Pitch/Roll for slope detection.
+- Add dynamic Slope Traversal logic (High-Torque/Medium-Speed mode) to `control_proc.py`.
 
-## 3rd Milestone: Compare ROS with Traditional Frameworks
-- Evaluate the overhead of running ROS 2 Jazzy on the Raspberry Pi 5 versus running bare-metal Python/C++ scripts (like the legacy `TemuFollower` codebase).
-- Compare the ease of implementing SLAM and Nav2 in ROS against custom state-machine logic.
-- Document the findings to justify the use of ROS 2 for the final competition run.
+## 3rd Milestone: Evacuation Zone & GUI
+- Develop the "Zero-Weight" OpenCV and YOLO11n-seg pipelines for evacuation zone ball detection.
+- Benchmark and hot-swap OpenCV vs YOLO on the physical arena.
+- Finalize the fully decoupled `gui_proc.py` using CustomTkinter to render real-time telemetry gauges (IMU, Odometry, Line Error) across the separate CPU core.

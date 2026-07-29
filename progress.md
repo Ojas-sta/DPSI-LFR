@@ -1,9 +1,11 @@
 # Project Progress
 
-- `[x]` Analyze existing repositories (`LineFollower`, `Semantics`, `TemuFollower`).
-- `[x]` Define Phase 1 V3 physical architecture and chassis design.
-- `[x]` Determine optimal component placement (3-layer stack, Arm on Layer 2, Battery on Layer 1).
-- `[x]` Initialize `dpsi_lfr_v3` branch and establish documentation structure.
-- `[ ]` Achieve Milestone 1: Get robot moving.
-- `[ ]` Achieve Milestone 2: Robotic arm moving.
-- `[ ]` Achieve Milestone 3: Compare ROS with other feasible traditional frameworks.
+- `[x]` Analyze existing repositories (`TemuFollower` vs `Overengineering-squared`).
+- `[x]` Define Temuv2.5 (Hybrid Overengineering) Software Architecture (5-Process IPC).
+- `[x]` Define Temuv2.5 System Architecture (Pi Camera + RealSense IMU + ESP32/IBT_2).
+- `[x]` Initialize `dpsi_lfr_v3` branch and establish all documentation/blueprints.
+- `[x]` Clean up deprecated code and archive old iteration files.
+- `[ ]` **(Current)** Implement `mp_manager.py` shared memory layer.
+- `[ ]` Achieve Milestone 1: High-Speed Line Tracking Pipeline.
+- `[ ]` Achieve Milestone 2: RealSense Integration (Depth & IMU Slope Detection).
+- `[ ]` Achieve Milestone 3: Evacuation Zone (OpenCV/YOLO) & CustomTkinter GUI.
