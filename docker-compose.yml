@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  temuv25:
+    build: .
+    container_name: temuv25_robot
+    privileged: true
+    devices:
+      - "/dev/gpiomem:/dev/gpiomem"
+      - "/dev/i2c-1:/dev/i2c-1"
+      - "/dev/video0:/dev/video0"
+    volumes:
+      - ./src:/app/src
+      - ./config:/app/config
+    environment:
+      - GPIOZERO_PIN_FACTORY=lgpio
+    restart: unless-stopped

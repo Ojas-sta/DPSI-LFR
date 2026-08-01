@@ -1,0 +1,6 @@
+opencv-python-headless
+gpiozero
+lgpio
+numpy
+numba
+pyserial
